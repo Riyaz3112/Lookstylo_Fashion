@@ -10,6 +10,7 @@ A modern, feature-rich billing and inventory management application for fashion 
 - 💸 Expense tracking
 - 📊 Financial reports & analytics
 - 🏷️ Shipping label creator
+- 🏷️ Price tag label printer (27 labels per A4 sheet)
 - 📱 Barcode scanner integration
 - ⚙️ Customizable settings
 
@@ -70,6 +71,14 @@ Simply double-click `index.html` to open in your browser.
 - Generate shipping labels with barcodes
 - QR codes for order tracking
 - Print-ready A5 format
+
+### Price Tags
+- Create professional price labels
+- Print 27 labels per A4 sheet
+- Customizable with product name, SKU, and price
+- Batch printing support
+- Local data storage
+- See [PRICE_TAGS_GUIDE.md](PRICE_TAGS_GUIDE.md) for detailed documentation
 
 ### Scanner
 - Barcode/QR code scanning for dispatch
