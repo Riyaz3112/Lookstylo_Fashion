@@ -872,7 +872,11 @@
                 let msg = '';
                 if (actionType === 'dispatch_today') {
                     msg = `*LOOKSTYLO FASHION*\n\nDear ${order.customer || order.name || 'Customer'},\nGreat news! 🎉 Your order (${order.id}) is scheduled to be dispatched today.\nWe will share the tracking details with you shortly.\n\nThank you for shopping with us!`;
-                    if (activeTab === 'scanner') setAwaitingTrackingFor(order);
+                    setAwaitingTrackingFor(order);
+                    setScanResult(null);
+                    if (activeTab !== 'scanner') {
+                        setActiveTab('scanner');
+                    }
                 } else if (actionType === 'dispatch_tomorrow') {
                     msg = `*LOOKSTYLO FASHION*\n\nDear ${order.customer || order.name || 'Customer'},\nSorry for the delay! 🙏 Your order (${order.id}) will be dispatched tomorrow. We appreciate your patience.\n\nThank you for shopping with us!`;
                 } else if (actionType === 'out_for_delivery') {
@@ -1048,6 +1052,7 @@
             const [scannerError, setScannerError] = useState('');
             const [scannerStatus, setScannerStatus] = useState('Preparing camera...');
             const scannerAttemptRef = useRef(0);
+            const scannerStopPromiseRef = useRef(Promise.resolve());
             const fallbackStreamRef = useRef(null);
             const fallbackFrameRef = useRef(null);
             const scannerModeRef = useRef(null);
@@ -1216,6 +1221,57 @@
                 setScannerStatus('Starting camera...');
 
                 try {
+                    if (window.BarcodeDetector && typeof window.BarcodeDetector === 'function') {
+                        try {
+                            readerElement.innerHTML = '';
+                            const video = document.createElement('video');
+                            video.setAttribute('playsinline', 'true');
+                            video.setAttribute('autoplay', 'true');
+                            video.setAttribute('muted', 'true');
+                            video.style.width = '100%';
+                            video.style.height = '100%';
+                            video.style.objectFit = 'cover';
+                            readerElement.appendChild(video);
+
+                            const stream = await navigator.mediaDevices.getUserMedia({
+                                video: { facingMode: { ideal: 'environment' } },
+                                audio: false
+                            });
+                            fallbackStreamRef.current = stream;
+                            video.srcObject = stream;
+                            await video.play();
+
+                            const detector = new window.BarcodeDetector({ formats: ['qr_code', 'code_128', 'code_39', 'ean_13', 'ean_8', 'upc_a', 'upc_e', 'itf'] });
+                            scannerRef.current = { type: 'fallback' };
+                            scannerModeRef.current = 'fallback';
+
+                            const scanLoop = async () => {
+                                if (!scannerModeRef.current || !fallbackStreamRef.current) return;
+                                try {
+                                    const barcodes = await detector.detect(video);
+                                    if (barcodes && barcodes.length > 0) {
+                                        const value = barcodes[0].rawValue;
+                                        if (value) {
+                                            await processScan(value);
+                                            return;
+                                        }
+                                    }
+                                } catch (err) {
+                                    console.warn('Fallback detector failed:', err);
+                                }
+                                fallbackFrameRef.current = requestAnimationFrame(() => {
+                                    void scanLoop();
+                                });
+                            };
+
+                            setScannerStatus('Scanning... Point the camera at a QR code or barcode.');
+                            void scanLoop();
+                            return;
+                        } catch (barcodeError) {
+                            console.warn('BarcodeDetector init failed, falling back to Html5Qrcode:', barcodeError);
+                        }
+                    }
+
                     if (window.Html5Qrcode) {
                         const html5QrCode = new window.Html5Qrcode('reader', { useBarCodeDetectorIfSupported: true });
                         scannerRef.current = html5QrCode;
@@ -1246,53 +1302,6 @@
                             }
                         }
                         throw lastError || new Error('Unable to open camera');
-                    }
-
-                    if (window.BarcodeDetector && typeof window.BarcodeDetector === 'function') {
-                        readerElement.innerHTML = '';
-                        const video = document.createElement('video');
-                        video.setAttribute('playsinline', 'true');
-                        video.setAttribute('autoplay', 'true');
-                        video.setAttribute('muted', 'true');
-                        video.style.width = '100%';
-                        video.style.height = '100%';
-                        video.style.objectFit = 'cover';
-                        readerElement.appendChild(video);
-
-                        const stream = await navigator.mediaDevices.getUserMedia({
-                            video: { facingMode: { ideal: 'environment' } },
-                            audio: false
-                        });
-                        fallbackStreamRef.current = stream;
-                        video.srcObject = stream;
-                        await video.play();
-
-                        const detector = new window.BarcodeDetector({ formats: ['qr_code'] });
-                        scannerRef.current = { type: 'fallback' };
-                        scannerModeRef.current = 'fallback';
-
-                        const scanLoop = async () => {
-                            if (!scannerModeRef.current || !fallbackStreamRef.current) return;
-                            try {
-                                const barcodes = await detector.detect(video);
-                                if (barcodes && barcodes.length > 0) {
-                                    const value = barcodes[0].rawValue;
-                                    if (value) {
-                                        await processScan(value);
-                                        return;
-                                    }
-                                }
-                            } catch (err) {
-                                console.warn('Fallback detector failed:', err);
-                            }
-                            fallbackFrameRef.current = requestAnimationFrame(() => {
-                                void scanLoop();
-                            });
-                        };
-
-                        setScannerStatus('Scanning... Point the camera at a QR code.');
-                        void scanLoop();
-                        return;
                     }
 
                     throw new Error('No supported scanner engine available');
@@ -1333,7 +1342,7 @@
                     return () => {
                         isMounted = false;
                         clearTimeout(timeoutId);
-                        void stopScanner();
+                        scannerStopPromiseRef.current = stopScanner();
                     };
                 }
 
