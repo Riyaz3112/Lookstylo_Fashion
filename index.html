@@ -1573,23 +1573,36 @@
                 try {
                     const response = await fetch(sheetUrl, { method: 'GET', headers: { 'Accept': 'application/json' } });
                     if (!response.ok) throw new Error(`Google Sheets load failed: ${response.status}`);
-                    const data = await response.json();
-                    const parsedSavedBills = parseStorageJson(data.savedBills, null);
-                    if (Array.isArray(parsedSavedBills)) localStorage.setItem('savedBills', JSON.stringify(parsedSavedBills));
-                    const parsedInventory = parseStorageJson(data.inventory, null);
-                    if (parsedInventory) localStorage.setItem('lookstylo_inv_v2', JSON.stringify(parsedInventory));
-                    const parsedShopExpenses = parseStorageJson(data.shopExpenses, null);
-                    if (parsedShopExpenses) localStorage.setItem('shopExpenses', JSON.stringify(parsedShopExpenses));
-                    const parsedCustomers = parseStorageJson(data.customers, null);
-                    if (parsedCustomers) localStorage.setItem('customers', JSON.stringify(parsedCustomers));
-                    const parsedInvoiceCounters = parseStorageJson(data.invoiceCounters, null);
-                    if (parsedInvoiceCounters) localStorage.setItem('invoiceCounters', JSON.stringify(parsedInvoiceCounters));
-                    const parsedSavedScans = parseStorageJson(data.savedScans, null);
-                    if (parsedSavedScans) localStorage.setItem('savedScans', JSON.stringify(parsedSavedScans));
+                    let data;
+                    try {
+                        data = await response.json();
+                    } catch (jsonError) {
+                        const text = await response.text();
+                        data = parseStorageJson(text, {});
+                    }
+                    if (typeof data === 'string') {
+                        data = parseStorageJson(data, {});
+                    }
+                    if (!data || typeof data !== 'object') {
+                        throw new Error('Invalid data format returned from webhook');
+                    }
+
+                    const saveValue = (key, rawValue) => {
+                        const parsed = parseStorageJson(rawValue, null);
+                        if (parsed !== null) localStorage.setItem(key, JSON.stringify(parsed));
+                    };
+
+                    if (data.savedBills !== undefined) saveValue('savedBills', data.savedBills);
+                    if (data.inventory !== undefined) saveValue('lookstylo_inv_v2', data.inventory);
+                    if (data.shopExpenses !== undefined) saveValue('shopExpenses', data.shopExpenses);
+                    if (data.customers !== undefined) saveValue('customers', data.customers);
+                    if (data.invoiceCounters !== undefined) saveValue('invoiceCounters', data.invoiceCounters);
+                    if (data.savedScans !== undefined) saveValue('savedScans', data.savedScans);
                     if (typeof data.logoUrl === 'string') localStorage.setItem('logoUrl', data.logoUrl);
                     if (typeof data.storeName === 'string') localStorage.setItem('storeName', data.storeName);
-                    if (data.invCategories) localStorage.setItem('lookstylo_categories', JSON.stringify(data.invCategories));
-                    if (data.auth) localStorage.setItem('lookstylo_auth', JSON.stringify(data.auth));
+                    if (data.invCategories !== undefined) saveValue('lookstylo_categories', data.invCategories);
+                    if (data.auth !== undefined) saveValue('lookstylo_auth', data.auth);
+
                     setSheetLoadStatus('Google Sheets data loaded successfully. Reloading...');
                     window.location.reload();
                 } catch (error) {
