@@ -1662,7 +1662,7 @@
             
             const currentMonthStr = todayStr.substring(0, 7); 
             const currentYearStr = todayStr.substring(0, 4); 
-            const [reportType, setReportType] = useState('daily'); 
+            const [reportType, setReportType] = useState('all'); 
             const [reportDate, setReportDate] = useState(todayStr);
             const [reportMonth, setReportMonth] = useState(currentMonthStr);
             const [reportYear, setReportYear] = useState(currentYearStr);
@@ -1670,6 +1670,7 @@
 
             const baseReportBills = savedBills.filter(b => {
                 if (!b.date) return false;
+                if (reportType === 'all') return true;
                 if (reportType === 'daily') return b.date === reportDate;
                 if (reportType === 'monthly') return b.date.startsWith(reportMonth);
                 if (reportType === 'yearly') return b.date.startsWith(reportYear);
@@ -2821,6 +2822,7 @@
                                     <div className="flex flex-wrap items-center gap-3 w-full xl:w-auto">
                                         <div className="bg-slate-50 p-1.5 rounded-xl border border-slate-200 flex items-center gap-1.5 flex-wrap flex-1 xl:flex-none">
                                             <select value={reportType} onChange={e=>setReportType(e.target.value)} className="p-2.5 bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500/20 font-bold text-slate-800 cursor-pointer text-sm min-w-[100px]">
+                                                <option value="all">All Invoices</option>
                                                 <option value="daily">Daily</option>
                                                 <option value="monthly">Monthly</option>
                                                 <option value="yearly">Yearly</option>
