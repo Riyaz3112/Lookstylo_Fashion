@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -108,6 +109,21 @@
 <body class="text-slate-800 antialiased selection:bg-indigo-200 selection:text-indigo-900">
     <div id="root"></div>
 
+    <!-- Error overlay for runtime issues (visible when JS throws) -->
+    <div id="error-overlay" style="display:none;position:fixed;inset:16px;background:rgba(15,23,42,0.95);color:#fff;padding:20px;border-radius:12px;z-index:99999;font-family:monospace;overflow:auto;white-space:pre-wrap;">JS Error</div>
+    <script>
+        window.addEventListener('error', function(e) {
+            const el = document.getElementById('error-overlay');
+            el.style.display = 'block';
+            el.textContent = 'Error: ' + (e.message || e.error || e.reason) + '\n\n' + (e.filename ? (e.filename + ':' + e.lineno + ':' + e.colno + '\n\n') : '') + (e.error && e.error.stack ? e.error.stack : '');
+        });
+        window.addEventListener('unhandledrejection', function(e) {
+            const el = document.getElementById('error-overlay');
+            el.style.display = 'block';
+            el.textContent = 'Unhandled Rejection:\n' + (e.reason && e.reason.stack ? e.reason.stack : JSON.stringify(e.reason));
+        });
+    </script>
+
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
@@ -212,7 +228,7 @@
             </div>
         );
 
-        const LabelContent = ({ orderId, toName, toAddress, toPhone, billName, billAddress, billPhone, copyLabel, logoUrl }) => (
+        const LabelContent = ({ orderId, toName, toAddress, toPhone, billName, billAddress, billPhone, billGSTIN, copyLabel, logoUrl, loyaltyPoints }) => (
             <div className="border-2 border-gray-900 flex-grow flex flex-col text-black bg-white box-border w-full h-full p-4 relative">
                 {copyLabel && <div className="absolute top-0 right-0 bg-indigo-600 text-white text-[9px] px-2 py-0.5 font-bold uppercase z-10">{copyLabel}</div>}
                 <div className="flex items-center justify-between border-b-2 border-gray-900 pb-4 mb-4">
@@ -244,20 +260,23 @@
                     <div className="mb-3">
                         <h3 className="font-extrabold text-[15px] uppercase mb-1">TO,</h3>
                         <div className="font-bold text-[12px] leading-tight uppercase">
-                            {toName || ' '}<br/>
+                                {toName || ' '}<br/>
                             {toAddress ? toAddress.split('\n').map((line, i) => <React.Fragment key={i}>{line}<br/></React.Fragment>) : ' '}<br/>
                             {toPhone ? `📞 ${toPhone}` : ' '}
                         </div>
                     </div>
 
-                    {(billName || billAddress || billPhone) && (
+                    {(billName || billAddress || billPhone || billGSTIN) && (
                         <div className="mb-3 pt-2 border-t border-dashed border-gray-400">
                             <h3 className="font-extrabold text-[13px] uppercase mb-1">BILL TO,</h3>
                             <div className="font-bold text-[10px] leading-tight uppercase text-gray-700">
                                 {billName || ' '}<br/>{billAddress ? billAddress.split('\n').map((line, i) => <React.Fragment key={i}>{line}<br/></React.Fragment>) : ' '}<br/>{billPhone || ' '}
+                                {billGSTIN && (<><br/><span className="text-[10px] font-bold">GSTIN: {billGSTIN}</span></>)}
                             </div>
                         </div>
                     )}
+
+                    
                 </div>
 
                 <div className="mt-0.5 mb-1 border-2 border-gray-900 flex flex-col justify-center items-center bg-gray-100 shrink-0 py-0.5">
@@ -266,6 +285,7 @@
                 </div>
 
                 <div className="mt-auto flex flex-col items-center pt-4 border-t-2 border-gray-900">
+                    <div className="mb-2 text-sm font-bold text-gray-700">Loyalty: <span className="text-indigo-700">{loyaltyPoints || 0} pts</span></div>
                     <div className="mb-4 bg-white p-2 rounded"><Barcode value={orderId || '0000'} /></div>
                     <div className="flex items-center justify-between w-full font-bold text-lg text-brand-red uppercase px-4">
                         <div className="flex items-center gap-1.5"><InstagramIcon className="w-6 h-6" /> LOOKSTLYO_MENSWEAR</div>
@@ -330,6 +350,93 @@
             const [deliveryActionBill, setDeliveryActionBill] = useState(null);
             const isEditingRef = useRef(false);
 
+            // Denomination Calculator state
+            const [showDenomModal, setShowDenomModal] = useState(false);
+            const [denomAmount, setDenomAmount] = useState('');
+            const [denomCounts, setDenomCounts] = useState(() => ({1000:0,500:0,200:0,100:0,50:0,20:0,10:0}));
+
+            const updateDenomCount = (denom, value) => {
+                setDenomCounts(prev => ({ ...prev, [denom]: Math.max(0, Math.floor(Number(value) || 0)) }));
+            };
+
+            const totalFromDenomCounts = (counts) => {
+                return Object.keys(counts || {}).reduce((s, k) => s + (Number(k) * (Number(counts[k]) || 0)), 0);
+            };
+
+            const buildBreakdownFromCounts = (counts) => {
+                return Object.keys(counts || {}).filter(k => Number(counts[k]) > 0).map(k => ({ denom: Number(k), count: Number(counts[k]) })).sort((a,b) => b.denom - a.denom);
+            };
+
+            const parseAmountInput = (input) => {
+                // Accept numbers or expressions like "500*10 200*20" or "500x10,200*20"
+                if (input == null) return 0;
+                const str = String(input).trim();
+                if (!str) return 0;
+                // If expression format present, parse sums
+                if (/[0-9]+\s*[x\*]\s*[0-9]+/i.test(str)) {
+                    const parts = str.split(/[,\s]+/).map(s => s.trim()).filter(Boolean);
+                    let total = 0;
+                    parts.forEach(p => {
+                        const m = p.match(/(\d+)\s*[x\*]\s*(\d+)/i);
+                        if (m) {
+                            const denom = Number(m[1]);
+                            const count = Number(m[2]);
+                            if (!Number.isNaN(denom) && !Number.isNaN(count)) total += denom * count;
+                        }
+                    });
+                    return total;
+                }
+                // Fallback to numeric parse
+                const n = Math.floor(Number(str) || 0);
+                return n;
+            };
+
+            const computeDenominations = (amountInput, denomsOverride) => {
+                const defaultDenoms = [2000,500,200,100,50,20,10,5,2,1];
+                const denoms = Array.isArray(denomsOverride) && denomsOverride.length ? denomsOverride : defaultDenoms;
+
+                // If user passed an expression like '500*10 200*20', we can return that breakdown directly
+                const raw = String(amountInput || '').trim();
+                if (/[0-9]+\s*[x\*]\s*[0-9]+/i.test(raw)) {
+                    const parts = raw.split(/[,\s]+/).map(s => s.trim()).filter(Boolean);
+                    const map = {};
+                    let total = 0;
+                    parts.forEach(p => {
+                        const m = p.match(/(\d+)\s*[x\*]\s*(\d+)/i);
+                        if (m) {
+                            const denom = Number(m[1]);
+                            const count = Number(m[2]);
+                            if (!Number.isNaN(denom) && !Number.isNaN(count)) {
+                                map[denom] = (map[denom] || 0) + count;
+                                total += denom * count;
+                            }
+                        }
+                    });
+                    const result = denoms.filter(d => map[d]).map(d => ({ denom: d, count: map[d] }));
+                    // Include any non-standard denominations found in expression
+                    Object.keys(map).map(k => Number(k)).filter(k => !denoms.includes(k)).forEach(k => result.push({ denom: k, count: map[k] }));
+                    return { result, remaining: 0, total };
+                }
+
+                let remaining = Math.floor(parseAmountInput(amountInput) || 0);
+                const result = [];
+                denoms.forEach(d => {
+                    const count = Math.floor(remaining / d);
+                    if (count > 0) {
+                        result.push({ denom: d, count });
+                        remaining -= count * d;
+                    }
+                });
+                return { result, remaining };
+            };
+
+            const copyDenomToClipboard = (breakdown) => {
+                try {
+                    navigator.clipboard.writeText(breakdown);
+                    showNotification('Denomination copied to clipboard');
+                } catch(e) { showNotification('Unable to copy'); }
+            };
+
             const showNotification = (msg) => {
                 setNotification(msg);
                 setTimeout(() => setNotification(null), 3000);
@@ -365,6 +472,16 @@
                 const handleBeforeInstallPrompt = (e) => { e.preventDefault(); setInstallPrompt(e); };
                 window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
                 return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+            }, []);
+
+            const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+            const [isMobileView, setIsMobileView] = useState(typeof window !== 'undefined' ? window.innerWidth <= 640 : false);
+            const [showScannerOnboard, setShowScannerOnboard] = useState(() => { try { return !localStorage.getItem('seenScannerOnboard'); } catch(e){ return false; } });
+
+            useEffect(() => {
+                const onResize = () => setIsMobileView(window.innerWidth <= 640);
+                window.addEventListener('resize', onResize);
+                return () => window.removeEventListener('resize', onResize);
             }, []);
 
             const handleInstallApp = async () => {
@@ -438,7 +555,25 @@
                 reader.readAsText(file);
             };
 
-            const [customers, setCustomers] = useState(() => JSON.parse(localStorage.getItem('customers') || '{}'));
+            const [customers, setCustomers] = useState(() => {
+                try {
+                    const raw = JSON.parse(localStorage.getItem('customers') || '{}');
+                    // Normalize entries to ensure points exist
+                    Object.keys(raw).forEach(k => {
+                        if (!raw[k]) raw[k] = {};
+                        if (typeof raw[k].points === 'undefined') raw[k].points = 0;
+                    });
+                    return raw;
+                } catch (e) { return {}; }
+            });
+
+            const [availablePoints, setAvailablePoints] = useState(0);
+            const [redeem1000, setRedeem1000] = useState(false);
+            const [autoAddPoints, setAutoAddPoints] = useState(() => {
+                return localStorage.getItem('autoAddPoints') === null ? true : localStorage.getItem('autoAddPoints') === 'true';
+            });
+            const [skipPoints, setSkipPoints] = useState(false);
+            const [pointsModal, setPointsModal] = useState(null); // { phone, pointsEarned, redeemed, billId }
 
             const DEFAULT_CATEGORIES = ['T-Shirts', 'Shirts', 'Jeans', 'Trousers', 'Jackets/Hoodies', 'Trackpants', 'Accessories', 'General'];
             const [invCategories, setInvCategories] = useState(() => {
@@ -627,6 +762,8 @@
             const [billAddress, setBillAddress] = useState(lDraft.billAddress || '');
             const [billPhone, setBillPhone] = useState(lDraft.billPhone || '');
 
+            const [billGSTIN, setBillGSTIN] = useState(bDraft.billGSTIN || '');
+
             const [billDate, setBillDate] = useState(bDraft.billDate || todayStr);
             const [billInvoice, setBillInvoice] = useState(bDraft.billInvoice || getNextInvoiceId(bDraft.billDate || todayStr));
             const [billType, setBillType] = useState(bDraft.billType || 'Non-GST'); 
@@ -642,6 +779,7 @@
             
             const [paidGpay, setPaidGpay] = useState(bDraft.paidGpay || 0);
             const [paidCash, setPaidCash] = useState(bDraft.paidCash || 0);
+            const [paidCashBreakdown, setPaidCashBreakdown] = useState(bDraft.paidCashBreakdown || null);
             const [advancePayment, setAdvancePayment] = useState(bDraft.advancePayment || 0);
             const [billDescription, setBillDescription] = useState(bDraft.billDescription || '');
 
@@ -677,6 +815,49 @@
                 const cleaned = phone.replace(/\D/g, '');
                 return cleaned.length === 10 ? `91${cleaned}` : cleaned;
             };
+
+            // Normalize phone keys for customers map: always store as 12-digit with country code when possible
+            const normalizePhoneKey = (phone) => {
+                if (!phone) return '';
+                const cleaned = ('' + phone).replace(/\D/g, '');
+                if (cleaned.length === 10) return `91${cleaned}`;
+                if (cleaned.length === 12 && cleaned.startsWith('91')) return cleaned;
+                return cleaned; // fallback: whatever digits present
+            };
+
+            // One-time migration: normalize existing localStorage.customers keys
+            useEffect(() => {
+                try {
+                    const raw = JSON.parse(localStorage.getItem('customers') || '{}');
+                    const migrated = {};
+                    let changed = false;
+                    Object.keys(raw).forEach(k => {
+                        const entry = raw[k] || {};
+                        const nk = normalizePhoneKey(k);
+                        const points = Number(entry.points || 0);
+                        const name = entry.name || '';
+                        const address = entry.address || '';
+                        if (!migrated[nk]) {
+                            migrated[nk] = { name, address, points };
+                        } else {
+                            migrated[nk].points = Number(migrated[nk].points || 0) + points;
+                            if (!migrated[nk].name && name) migrated[nk].name = name;
+                            if (!migrated[nk].address && address) migrated[nk].address = address;
+                        }
+                        if (nk !== k) changed = true;
+                    });
+                    Object.keys(migrated).forEach(k => { if (typeof migrated[k].points === 'undefined') migrated[k].points = 0; });
+                    if (changed) {
+                        localStorage.setItem('customers', JSON.stringify(migrated));
+                        setCustomers(migrated);
+                        try {
+                            const curKey = normalizePhoneKey(billCustomerPhone);
+                            setAvailablePoints((curKey && migrated[curKey] && migrated[curKey].points) ? migrated[curKey].points : availablePoints);
+                        } catch (e) {}
+                        console.log('Migrated customers to normalized phone keys');
+                    }
+                } catch (e) { /* ignore */ }
+            }, []);
 
             // Unified Delivery Action Handler
             const handleDeliveryAction = (order, actionType) => {
@@ -735,7 +916,7 @@
                     msg += `👇 *Click link to view Payment QR Code:*\n${qrLink}\n\n*Or use UPI ID:* 9360232991@okbizaxis\n\n`;
                 }
                 
-                msg += `📸 Follow us on Instagram for the latest arrivals, exclusive offers & fashion updates:\nhttps://www.instagram.com/lookstlyo_fashion?igsh=MWs4amhoazR5YTg5NQ==\n\n💬 Join our WhatsApp Group to get instant updates on new collections, discounts & giveaways:\nhttps://chat.whatsapp.com/IjvWkTNYwv8De8u9p4kfyv\n\n⭐ We'd love to hear about your experience! Please leave us a Google review:\nhttps://share.google/ox6hh22WFQ4vzLyPk\n\nThank you for choosing LookStylo Fashion. We look forward to serving you again! 😊`;
+                msg += `📸 Follow us on Instagram for the latest arrivals, exclusive offers & fashion updates:\nhttps://www.instagram.com/lookstylo_menswear?igsh=MWs4amhoazR5YTg5NQ==\n\n💬 Join our WhatsApp Group to get instant updates on new collections, discounts & giveaways:\nhttps://chat.whatsapp.com/IjvWkTNYwv8De8u9p4kfyv\n\n⭐ We'd love to hear about your experience! Please leave us a Google review:\nhttps://share.google/YggYHlZgmJw3xvRmG\n\nThank you for choosing LookStylo Fashion. We look forward to serving you again! 😊`;
                 
                 openWhatsAppMsg(phone, msg);
             };
@@ -810,6 +991,11 @@
                 setBillInvoice(billToEdit.id); setBillDate(billToEdit.date); setBillType(billToEdit.type || 'Non-GST');
                 setBillCustomerName(billToEdit.customer === 'Walk-in' ? '' : billToEdit.customer);
                 setBillCustomerPhone(billToEdit.phone || ''); setBillCustomerAddress(billToEdit.address || '');
+                setBillName(billToEdit.billToName || '');
+                setBillGSTIN(billToEdit.billGSTIN || '');
+                setRedeem1000(Boolean(billToEdit.redeemed));
+                const phoneKeyFromEdit = normalizePhoneKey(billToEdit.phone);
+                setAvailablePoints((phoneKeyFromEdit && customers[phoneKeyFromEdit] && customers[phoneKeyFromEdit].points) ? customers[phoneKeyFromEdit].points : 0);
                 setBillDelivery(billToEdit.delivery || 'Store Walk-in'); setBillCourier(billToEdit.courier || 'Professional Courier');
                 setBillTracking(billToEdit.tracking || ''); setBillDiscount(billToEdit.discount || 0); setBillPromoCode(billToEdit.promoCode || 'NO CODE');
                 setBillDescription(billToEdit.description || '');
@@ -830,18 +1016,22 @@
             }, [orderId, toName, toAddress, toPhone, billName, billAddress, billPhone]);
 
             useEffect(() => {
-                const draft = { billDate, billInvoice, billType, billCustomerName, billCustomerPhone, billCustomerAddress, billDelivery, billCourier, billTracking, billDiscount, billPromoCode, billItems, paidGpay, paidCash, advancePayment, billDescription };
+                const draft = { billDate, billInvoice, billType, billCustomerName, billCustomerPhone, billCustomerAddress, billDelivery, billCourier, billTracking, billDiscount, billPromoCode, billItems, paidGpay, paidCash, paidCashBreakdown, advancePayment, billDescription, billGSTIN, redeem1000 };
                 localStorage.setItem('billingDraft', JSON.stringify(draft));
-            }, [billDate, billInvoice, billType, billCustomerName, billCustomerPhone, billCustomerAddress, billDelivery, billCourier, billTracking, billDiscount, billPromoCode, billItems, paidGpay, paidCash, advancePayment, billDescription]);
+            }, [billDate, billInvoice, billType, billCustomerName, billCustomerPhone, billCustomerAddress, billDelivery, billCourier, billTracking, billDiscount, billPromoCode, billItems, paidGpay, paidCash, paidCashBreakdown, advancePayment, billDescription, billGSTIN, redeem1000]);
 
             const handlePhoneChange = (e) => {
                 const val = e.target.value;
                 setBillCustomerPhone(val);
-                if (customers[val]) {
-                    if (!billCustomerName) setBillCustomerName(customers[val].name || '');
-                    if (!billCustomerAddress) setBillCustomerAddress(customers[val].address || '');
+                const nk = normalizePhoneKey(val);
+                if (nk && customers[nk]) {
+                    if (!billCustomerName) setBillCustomerName(customers[nk].name || '');
+                    if (!billCustomerAddress) setBillCustomerAddress(customers[nk].address || '');
+                    setAvailablePoints(customers[nk].points || 0);
+                    // reset redeem toggle when changing customer
+                    setRedeem1000(false);
                 }
-            };
+            }
 
             const [scanResult, setScanResult] = useState(null);
             const [awaitingTrackingFor, _setAwaitingTrackingFor] = useState(null);
@@ -1005,7 +1195,7 @@
                 }
 
                 if (!window.isSecureContext && window.location.protocol !== 'http:') {
-                    setScannerError('Use localhost or HTTPS for camera access.');
+                    setScannerError('Camera disabled on file://. Serve the app via http://localhost or HTTPS to enable camera access, or use the Manual Entry below.');
                     setScannerStatus('Insecure context');
                     return;
                 }
@@ -1114,6 +1304,19 @@
                 }
             };
 
+            const enterFullscreenAndStart = async () => {
+                const reader = document.getElementById('reader');
+                try {
+                    if (reader && reader.requestFullscreen) await reader.requestFullscreen();
+                    else if (reader && reader.webkitRequestFullscreen) await reader.webkitRequestFullscreen();
+                } catch (e) {
+                    console.warn('Fullscreen request failed:', e);
+                }
+                setScannerError('');
+                setScannerStatus('Starting camera...');
+                try { await startScanner(); } catch (e) { console.warn('startScanner failed after fullscreen:', e); }
+            };
+
             useEffect(() => {
                 let isMounted = true;
 
@@ -1147,7 +1350,8 @@
                     phone: billCustomerPhone, address: billCustomerAddress, delivery: billDelivery,
                     courier: billCourier, tracking: billTracking, discount: billDiscount, promoCode: billPromoCode,
                     items: billItems, total: grandTotal, cash: Number(paidCash) || 0, gpay: Number(paidGpay) || 0,
-                    advance: Number(advancePayment) || 0, balance: balanceAmount, description: billDescription
+                    advance: Number(advancePayment) || 0, balance: balanceAmount, description: billDescription,
+                    billToName: billName || '', billGSTIN: billGSTIN || '', redeemed: redeem1000 || false
                 };
 
                 setSavedBills(prevBills => {
@@ -1158,12 +1362,55 @@
                     return updated;
                 });
 
-                if (billCustomerPhone && billCustomerPhone.trim() !== '') {
+                const applyPointsToCustomer = (phone, pointsEarned, redeemedFlag) => {
                     setCustomers(prev => {
-                        const updated = { ...prev, [billCustomerPhone.trim()]: { name: billCustomerName, address: billCustomerAddress } };
+                        const phoneKey = normalizePhoneKey(phone);
+                        if (!phoneKey) return prev;
+                        const existing = prev[phoneKey] || { name: '', address: '', points: 0 };
+                        const pointsBefore = Number(existing.points || 0);
+                        const redeemed = redeemedFlag && (pointsBefore >= 1000);
+                        const pointsAfter = Math.max(0, pointsBefore - (redeemed ? 1000 : 0) + (pointsEarned || 0));
+
+                        const updatedEntry = { name: billCustomerName, address: billCustomerAddress, points: pointsAfter };
+                        const updated = { ...prev, [phoneKey]: updatedEntry };
                         localStorage.setItem('customers', JSON.stringify(updated));
+                        setAvailablePoints(pointsAfter);
+
+                        try {
+                            setSavedBills(cur => {
+                                const idx = cur.findIndex(b => b.id === billInvoice);
+                                if (idx > -1) {
+                                    const billCopy = { ...cur[idx], pointsEarned, pointsBefore, pointsAfter, redeemed };
+                                    const newList = [...cur]; newList[idx] = billCopy; localStorage.setItem('savedBills', JSON.stringify(newList)); return newList;
+                                }
+                                return cur;
+                            });
+                        } catch (e) {}
+
                         return updated;
                     });
+                };
+
+                const applyPointsConfirmed = () => {
+                    if (!pointsModal) return setPointsModal(null);
+                    applyPointsToCustomer(pointsModal.phone, pointsModal.pointsEarned, pointsModal.redeemed);
+                    setPointsModal(null);
+                };
+
+                if (billCustomerPhone && billCustomerPhone.trim() !== '' && !skipPoints) {
+                    // compute points
+                    const rawPoints = (Number(grandTotal) || 0) * 0.005;
+                    const pointsEarned = Math.round(rawPoints * 10) / 10;
+                    const phoneKey = normalizePhoneKey(billCustomerPhone);
+                    const pointsBefore = (phoneKey && customers[phoneKey] && Number(customers[phoneKey].points)) || 0;
+                    const redeemedFlag = redeem1000 && (pointsBefore >= 1000);
+
+                    if (autoAddPoints) {
+                        applyPointsToCustomer(billCustomerPhone, pointsEarned, redeemedFlag);
+                    } else {
+                        // ask for permission via modal
+                        setPointsModal({ phone: normalizePhoneKey(billCustomerPhone), pointsEarned, redeemed: redeemedFlag, billId: billInvoice });
+                    }
                 }
             };
 
@@ -1197,7 +1444,7 @@
                 isEditingRef.current = false;
                 setBillCustomerName(''); setBillType('Non-GST'); setBillCustomerPhone(''); setBillCustomerAddress('');
                 setBillTracking(''); setBillDiscount(0); setPaidGpay(0); setPaidCash(0); setAdvancePayment(0); setBillPromoCode('NO CODE');
-                setBillDescription('');
+                setBillDescription(''); setBillGSTIN(''); setRedeem1000(false); setAvailablePoints(0);
                 setBillItems([{ id: generateSafeId(), particular: '', hsn: '', gst: 0, qty: 1, rate: 0 }]); 
                 
                 const today = new Date().toISOString().split('T')[0];
@@ -1402,6 +1649,15 @@
                             <div className="space-y-1">
                                 <p><span className="w-14 inline-block text-gray-600">Name:</span> <span className="uppercase border-b border-gray-400 pb-0.5 inline-block min-w-[120px]">{billCustomerName || 'Walk-in Customer'}</span></p>
                                 <p><span className="w-14 inline-block text-gray-600">Phone:</span> <span className="border-b border-gray-400 pb-0.5 inline-block min-w-[120px]">{billCustomerPhone || '-'}</span></p>
+                                {/* Loyalty points for customer */}
+                                <p><span className="w-14 inline-block text-gray-600">Loyalty:</span> <span className="border-b border-gray-400 pb-0.5 inline-block min-w-[120px]">{(billCustomerPhone && customers[normalizePhoneKey(billCustomerPhone)] && customers[normalizePhoneKey(billCustomerPhone)].points) ? customers[normalizePhoneKey(billCustomerPhone)].points : availablePoints}</span></p>
+                                <div className="text-[9px] text-gray-500 mt-0.5">(5 pts per ₹1000, shown with 1-decimal)</div>
+                                {billType === 'GST' && billName && (
+                                    <p><span className="w-14 inline-block text-gray-600">Company:</span> <span className="border-b border-gray-400 pb-0.5 inline-block min-w-[120px]">{billName}</span></p>
+                                )}
+                                {billType === 'GST' && billGSTIN && (
+                                    <p><span className="w-14 inline-block text-gray-600">GSTIN:</span> <span className="border-b border-gray-400 pb-0.5 inline-block min-w-[120px]">{billGSTIN}</span></p>
+                                )}
                                 <p><span className="w-14 inline-block text-gray-600">Del:</span> <span className="border-b border-gray-400 pb-0.5 inline-block min-w-[120px] font-bold">{deliveryText}</span></p>
                             </div>
                             <div className="space-y-1 text-right">
@@ -1517,6 +1773,97 @@
                         {balanceAmount <= 0 && grandTotal > 0 && (
                             <div className="paid-seal">PAID</div>
                         )}
+
+                        {/* -------------------- TAB: CALCULATOR -------------------- */}
+                        {activeTab === 'calculator' && (
+                            <div className="w-full mx-auto bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-slate-200">
+                                <div className="flex justify-between items-center border-b border-slate-100 pb-4 mb-6">
+                                    <div>
+                                        <h2 className="text-2xl font-black text-slate-900 tracking-tight">Cash Denomination Calculator</h2>
+                                        <p className="text-sm text-slate-500 font-medium mt-1">Quickly break an amount into common currency denominations.</p>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <div className="md:col-span-2">
+                                        <input type="number" min="0" value={denomAmount} onChange={e=>setDenomAmount(e.target.value)} placeholder="Enter amount (e.g., 1376)" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none text-lg font-bold" />
+                                        <div className="flex flex-wrap gap-2 mt-3">
+                                            {[1000,500,200,100,50,20,10].map(p => (
+                                                <div key={p} className="flex items-center gap-2">
+                                                    <button type="button" onClick={() => { const cur = parseAmountInput(denomAmount); setDenomAmount(String(cur + Number(p))); }} className="text-sm font-bold px-3 py-2 bg-white border border-slate-200 rounded shadow-sm hover:bg-slate-50">₹{p}</button>
+                                                    <input type="number" min="0" value={denomCounts[p] || ''} onChange={e=>updateDenomCount(p, e.target.value)} placeholder="count" className="w-16 p-2 bg-white border border-slate-200 rounded text-sm font-bold text-center" />
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <button onClick={() => { copyDenomToClipboard((() => { const { result, remaining } = computeDenominations(denomAmount, [500,200,100,50,20,10]); return (result.map(r=>`${r.denom} x ${r.count}`).join('\n') + (remaining?`\nRemaining: ₹${remaining}`:'')); })()); }} className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-3 rounded-xl font-bold">Copy Breakdown</button>
+                                        <button onClick={() => {
+                                            const total = parseAmountInput(denomAmount);
+                                            const { result, remaining, total: exprTotal } = computeDenominations(denomAmount, [500,200,100,50,20,10]);
+                                            const breakdown = result || [];
+                                            const appliedTotal = exprTotal || total;
+                                            setPaidCash(appliedTotal);
+                                            setPaidCashBreakdown(breakdown);
+                                            showNotification(`Applied ₹${appliedTotal} as Paid Cash`);
+                                        }} className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl font-bold">Apply as Paid Cash</button>
+                                        <button onClick={() => {
+                                            // Apply from counts
+                                            const total = totalFromDenomCounts(denomCounts);
+                                            const breakdown = buildBreakdownFromCounts(denomCounts);
+                                            if (total <= 0) return showNotification('Enter counts first');
+                                            setPaidCash(total);
+                                            setPaidCashBreakdown(breakdown);
+                                            showNotification(`Applied ₹${total} as Paid Cash from counts`);
+                                        }} className="flex-1 bg-emerald-800 hover:bg-emerald-900 text-white py-3 rounded-xl font-bold">Apply Counts</button>
+                                    </div>
+                                </div>
+
+                                    <div className="mt-6 bg-gray-50 border border-slate-200 p-4 rounded">
+                                    {(() => {
+                                        const countsTotal = totalFromDenomCounts(denomCounts);
+                                        if (countsTotal > 0) {
+                                            const result = buildBreakdownFromCounts(denomCounts);
+                                            return (
+                                                <div>
+                                                    <table className="w-full text-left text-sm">
+                                                        <thead>
+                                                            <tr className="text-xs text-slate-500 uppercase tracking-wider"><th>Denomination</th><th className="text-right">Count</th></tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {result.map(r => (
+                                                                <tr key={r.denom} className="border-t border-slate-200"><td className="py-2">₹ {r.denom}</td><td className="py-2 text-right font-bold">{r.count}</td></tr>
+                                                            ))}
+                                                            <tr className="border-t border-slate-200"><td className="py-2 font-bold">Total</td><td className="py-2 text-right font-bold">₹ {countsTotal}</td></tr>
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            );
+                                        }
+
+                                        if (!denomAmount || Number(denomAmount) <= 0) return <div className="text-sm text-slate-500">Enter an amount to see breakdown.</div>;
+                                        const { result, remaining } = computeDenominations(denomAmount, [500,200,100,50,20,10]);
+                                        const totalFromResult = (result || []).reduce((s, r) => s + (r.denom * r.count), 0) + (remaining || 0);
+                                        return (
+                                            <div>
+                                                <table className="w-full text-left text-sm">
+                                                    <thead>
+                                                        <tr className="text-xs text-slate-500 uppercase tracking-wider"><th>Denomination</th><th className="text-right">Count</th></tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {result.map(r => (
+                                                            <tr key={r.denom} className="border-t border-slate-200"><td className="py-2">₹ {r.denom}</td><td className="py-2 text-right font-bold">{r.count}</td></tr>
+                                                        ))}
+                                                        {remaining > 0 && <tr className="border-t border-slate-200"><td className="py-2">Remaining</td><td className="py-2 text-right font-bold">₹ {remaining}</td></tr>}
+                                                        <tr className="border-t border-slate-200"><td className="py-2 font-bold">Total</td><td className="py-2 text-right font-bold">₹ {totalFromResult}</td></tr>
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        );
+                                    })()}
+                                </div>
+                            </div>
+                        )}
                     </div>
                 );
             };
@@ -1623,6 +1970,76 @@
                         </div>
                     )}
 
+                    {/* Denomination Calculator Modal */}
+                    {showDenomModal && (
+                        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[380] flex items-center justify-center p-4" onClick={() => setShowDenomModal(false)}>
+                            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-6 transform transition-all border border-slate-200" onClick={e => e.stopPropagation()}>
+                                <div className="flex justify-between items-center mb-4">
+                                    <h3 className="text-lg font-extrabold">Cash Denomination Calculator</h3>
+                                    <button onClick={() => setShowDenomModal(false)} className="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button>
+                                </div>
+                                <div className="space-y-3">
+                                    <input type="number" min="0" value={denomAmount} onChange={e=>setDenomAmount(e.target.value)} placeholder="Enter amount (e.g., 1376)" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none" />
+                                        <div className="flex flex-wrap gap-2 mt-3">
+                                        {[1000,500,200,100,50,20,10].map(p => (
+                                            <div key={p} className="flex items-center gap-2">
+                                                <button type="button" onClick={() => { const cur = parseAmountInput(denomAmount); setDenomAmount(String(cur + Number(p))); }} className="text-sm font-bold px-3 py-2 bg-white border border-slate-200 rounded shadow-sm hover:bg-slate-50">₹{p}</button>
+                                                <input type="number" min="0" value={denomCounts[p] || ''} onChange={e=>updateDenomCount(p, e.target.value)} placeholder="count" className="w-16 p-2 bg-white border border-slate-200 rounded text-sm font-bold text-center" />
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <div className="bg-gray-50 border border-slate-200 p-3 rounded">
+                                        {(() => {
+                                            const countsTotal = totalFromDenomCounts(denomCounts);
+                                            if (countsTotal > 0) {
+                                                const res = buildBreakdownFromCounts(denomCounts);
+                                                const breakdown = res.map(r => `${r.denom} x ${r.count}`).join('\n');
+                                                return (
+                                                    <div>
+                                                        <pre className="text-sm font-mono text-slate-800 mb-3">{breakdown}\nTotal: ₹{countsTotal}</pre>
+                                                        <div className="flex gap-2">
+                                                            <button onClick={() => copyDenomToClipboard(breakdown)} className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded">Copy</button>
+                                                            <button onClick={() => { setPaidCash(countsTotal); setPaidCashBreakdown(res); showNotification(`Applied ₹${countsTotal} as Paid Cash`); }} className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded">Apply as Paid Cash</button>
+                                                            <button onClick={() => { setDenomAmount(''); setDenomCounts({1000:0,500:0,200:0,100:0,50:0,20:0,10:0}); }} className="flex-1 bg-white border border-slate-200 hover:bg-slate-50 py-2 rounded">Clear</button>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            }
+
+                                            if (!denomAmount || Number(denomAmount) <= 0) return <div className="text-sm text-slate-500">Enter an amount to see breakdown.</div>;
+                                            const { result, remaining } = computeDenominations(denomAmount, [500,200,100,50,20,10]);
+                                            const breakdown = result.map(r => `${r.denom} x ${r.count}`).join('\n') + (remaining ? `\nRemaining: ₹${remaining}` : '');
+                                            const totalFromResult = (result || []).reduce((s, r) => s + (r.denom * r.count), 0) + (remaining || 0);
+                                            return (
+                                                <div>
+                                                    <pre className="text-sm font-mono text-slate-800 mb-3">{breakdown}\nTotal: ₹{totalFromResult}</pre>
+                                                    <div className="flex gap-2">
+                                                        <button onClick={() => copyDenomToClipboard(breakdown)} className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded">Copy</button>
+                                                        <button onClick={() => {
+                                                            const total = parseAmountInput(denomAmount);
+                                                            const { result, remaining, total: exprTotal } = computeDenominations(denomAmount, [500,200,100,50,20,10]);
+                                                            const breakdownObj = result || [];
+                                                            const appliedTotal = exprTotal || total;
+                                                            setPaidCash(appliedTotal);
+                                                            setPaidCashBreakdown(breakdownObj);
+                                                            showNotification(`Applied ₹${appliedTotal} as Paid Cash`);
+                                                        }} className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded">Apply as Paid Cash</button>
+                                                        <button onClick={() => { setDenomAmount(''); }} className="flex-1 bg-white border border-slate-200 hover:bg-slate-50 py-2 rounded">Clear</button>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })()}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Floating Denomination Calculator Button */}
+                    <button title="Cash Denominations" onClick={() => setShowDenomModal(true)} className="fixed right-6 bottom-6 z-[300] bg-indigo-600 hover:bg-indigo-700 text-white p-4 rounded-full shadow-2xl">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .672-3 1.5S10.343 11 12 11s3-.672 3-1.5S13.657 8 12 8zM12 13.5c-1.657 0-3 .672-3 1.5S10.343 16.5 12 16.5s3-.672 3-1.5S13.657 13.5 12 13.5z"/></svg>
+                    </button>
+
                     {showGpayModal && (
                         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[300] flex items-center justify-center p-4 animate-fade-in" onClick={() => setShowGpayModal(false)}>
                             <div className="bg-white rounded-3xl shadow-2xl p-8 transform transition-all max-w-sm w-full text-center" onClick={e => e.stopPropagation()}>
@@ -1721,11 +2138,31 @@
                                     </h1>
                                 </div>
                                 <div className="flex items-center gap-2 xl:hidden">
+                                    <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold px-3 py-2 rounded-lg transition-colors border border-slate-700 flex items-center gap-2">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
+                                    </button>
                                     <button onClick={() => setIsAppLocked(true)} className="bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold px-3 py-2 rounded-lg transition-colors border border-slate-700 flex items-center gap-2">
                                         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
                                     </button>
                                 </div>
                             </div>
+                            {mobileMenuOpen && (
+                                <div className="xl:hidden bg-slate-900 text-white border-t border-slate-800 w-full">
+                                    <div className="max-w-[1400px] mx-auto p-4">
+                                        <div className="flex flex-col gap-2" onClick={() => setMobileMenuOpen(false)}>
+                                            <TabButton id="billing" label="Billing" activeTab={activeTab} setActiveTab={setActiveTab} />
+                                            <TabButton id="inventory" label="Inventory" activeTab={activeTab} setActiveTab={setActiveTab} />
+                                            <TabButton id="expenses" label="Expenses" activeTab={activeTab} setActiveTab={setActiveTab} />
+                                            <TabButton id="reports" label="Reports" activeTab={activeTab} setActiveTab={setActiveTab} />
+                                            <TabButton id="generator" label="Labels" activeTab={activeTab} setActiveTab={setActiveTab} />
+                                            <TabButton id="pricetags" label="Price Tags" activeTab={activeTab} setActiveTab={setActiveTab} />
+                                            <TabButton id="scanner" label="Scanner" activeTab={activeTab} setActiveTab={setActiveTab} />
+                                            <TabButton id="calculator" label="Calculator" activeTab={activeTab} setActiveTab={setActiveTab} />
+                                            <TabButton id="settings" label="Settings" activeTab={activeTab} setActiveTab={setActiveTab} />
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
                             
                             <div className="flex w-full xl:w-auto overflow-x-auto pb-2 xl:pb-0 hide-scroll">
                                 <div className="flex bg-slate-800/50 p-1.5 rounded-2xl border border-slate-700/50 w-max mx-auto gap-1">
@@ -1736,6 +2173,7 @@
                                     <TabButton id="generator" label="Labels" activeTab={activeTab} setActiveTab={setActiveTab} />
                                     <TabButton id="pricetags" label="Price Tags" activeTab={activeTab} setActiveTab={setActiveTab} />
                                     <TabButton id="scanner" label="Scanner" activeTab={activeTab} setActiveTab={setActiveTab} />
+                                    <TabButton id="calculator" label="Calculator" activeTab={activeTab} setActiveTab={setActiveTab} />
                                     <TabButton id="settings" label="Settings" activeTab={activeTab} setActiveTab={setActiveTab} />
                                 </div>
                             </div>
@@ -1779,7 +2217,19 @@
                                             </select>
                                         </div>
                                         <ModernInput label="Phone Number" type="text" value={billCustomerPhone} onChange={handlePhoneChange} placeholder="Enter Phone to Auto-Fill" className="md:col-span-1 border-slate-200 focus:border-indigo-500 font-mono" />
-                                        <ModernInput label="Customer Name" type="text" value={billCustomerName} onChange={e=>setBillCustomerName(e.target.value)} placeholder="Walk-in Customer" className="md:col-span-2" />
+                                        <ModernInput label="Customer Name" type="text" value={billCustomerName} onChange={e=>setBillCustomerName(e.target.value)} placeholder="Walk-in Customer" className="md:col-span-1" />
+                                        <ModernInput label="Billing / Company Name" type="text" value={billName} onChange={e=>setBillName(e.target.value)} placeholder="(Optional) Company or Firm Name" className="md:col-span-1" />
+                                        {billType === 'GST' && (
+                                            <ModernInput label="Billing GSTIN" type="text" value={billGSTIN} onChange={e=>setBillGSTIN(e.target.value)} placeholder="Enter GSTIN for B2B" className="md:col-span-1" />
+                                        )}
+                                        
+                                        <div className="md:col-span-3 flex items-center gap-4 mt-2">
+                                            <div className="text-sm text-slate-700 font-bold">Loyalty Points: <span className="text-indigo-700">{availablePoints}</span></div>
+                                            <label className="flex items-center gap-2 text-sm">
+                                                <input type="checkbox" checked={redeem1000} disabled={availablePoints < 1000} onChange={e=>{ setRedeem1000(e.target.checked); if(e.target.checked) setBillDiscount(10); else setBillDiscount(0); }} className="w-4 h-4" />
+                                                <span className="text-slate-600">Redeem 1000 pts = 10% off</span>
+                                            </label>
+                                        </div>
                                     </div>
 
                                     <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200 space-y-5">
@@ -1945,9 +2395,9 @@
                                         {renderBillContent("Duplicate - Shop Copy")}
                                     </div>
 
-                                    {billDelivery === 'Courier' && (
+                                        {billDelivery === 'Courier' && (
                                         <div className="a5-container relative print:scale-100 transform origin-top scale-[0.85] md:scale-95 transition-all hover:shadow-lg print:flex mt-4">
-                                            <LabelContent copyLabel="Shipping Label" orderId={billTracking || billInvoice} toName={billCustomerName} toAddress={billCustomerAddress} toPhone={billCustomerPhone} logoUrl={logoUrl} />
+                                            <LabelContent copyLabel="Shipping Label" orderId={billTracking || billInvoice} toName={billCustomerName} toAddress={billCustomerAddress} toPhone={billCustomerPhone} billName={billName} billGSTIN={billGSTIN} logoUrl={logoUrl} loyaltyPoints={(billCustomerPhone && customers[normalizePhoneKey(billCustomerPhone)] && customers[normalizePhoneKey(billCustomerPhone)].points) ? customers[normalizePhoneKey(billCustomerPhone)].points : availablePoints} />
                                         </div>
                                     )}
                                 </div>
@@ -2380,7 +2830,7 @@
                                 </div>
                                 <div className="w-full lg:w-[60%] flex justify-center bg-slate-50 p-6 md:p-8 rounded-3xl border border-slate-200 print-section print:overflow-visible print:h-auto print:block print:p-0 print:bg-white print:border-none">
                                     <div className="a5-container hover:shadow-xl transition-shadow">
-                                        <LabelContent orderId={orderId} toName={toName} toAddress={toAddress} toPhone={toPhone} logoUrl={logoUrl} />
+                                        <LabelContent orderId={orderId} toName={toName} toAddress={toAddress} toPhone={toPhone} billName={billName} billGSTIN={billGSTIN} logoUrl={logoUrl} />
                                     </div>
                                 </div>
                             </>
@@ -2514,21 +2964,55 @@
                         {/* -------------------- TAB: SCANNER -------------------- */}
                         {activeTab === 'scanner' && (
                             <div className="w-full max-w-5xl mx-auto flex flex-col gap-8">
-                                <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-200 flex flex-col items-center">
-                                    <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mb-6 border border-slate-200">
-                                        <Icons.Camera className="w-8 h-8 text-slate-800" />
-                                    </div>
-                                    <h2 className="text-2xl font-black text-slate-900 mb-8 text-center">Dispatch Scanner</h2>
+                                <div className={`${isMobileView ? 'fixed inset-0 bg-black text-white z-50 flex flex-col' : 'bg-white p-8 rounded-3xl shadow-sm border border-slate-200 flex flex-col items-center'}`}>
+                                    {isMobileView ? (
+                                        <div className="flex items-center justify-between p-3 border-b border-white/10">
+                                            <button onClick={() => setActiveTab('billing')} className="text-white text-sm font-bold px-3 py-2 bg-white/6 rounded">Back</button>
+                                            <div className="font-black">Dispatch Scanner</div>
+                                            <button onClick={() => setShowDenomModal(true)} className="text-white text-sm font-bold px-3 py-2 bg-white/6 rounded">Calc</button>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mb-6 border border-slate-200">
+                                                <Icons.Camera className="w-8 h-8 text-slate-800" />
+                                            </div>
+                                            <h2 className="text-2xl font-black text-slate-900 mb-8 text-center">Dispatch Scanner</h2>
+                                        </>
+                                    )}
+
+                                    {showScannerOnboard && isMobileView && (
+                                        <div className="fixed inset-0 z-[410] bg-black/70 flex items-center justify-center p-4">
+                                            <div className="bg-white rounded-2xl p-5 max-w-sm w-full text-slate-900">
+                                                <h3 className="text-lg font-bold mb-2">Allow Camera Access</h3>
+                                                <p className="text-sm text-slate-600">To scan QR codes on mobile, allow camera permission when the browser asks. If you decline, you can still use Manual Entry.</p>
+                                                <div className="mt-4 flex gap-2">
+                                                    <button onClick={() => setShowScannerOnboard(false)} className="flex-1 bg-indigo-600 text-white py-2 rounded">Got it</button>
+                                                    <button onClick={() => { try { localStorage.setItem('seenScannerOnboard', 'true'); } catch(e){} setShowScannerOnboard(false); }} className="flex-1 bg-white border border-slate-200 py-2 rounded">Don't show again</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
                                     
+                                    {window.location.protocol === 'file:' && (
+                                        <div className="w-full max-w-md mx-auto mb-6 p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+                                            <div className="font-bold">Camera unavailable when opened via <span className="font-mono">file://</span></div>
+                                            <div className="mt-2">To enable camera scanning, serve this folder locally and open via <span className="font-mono">http://localhost</span> or HTTPS. Copy one of these commands and run it from the project folder:</div>
+                                            <div className="flex gap-2 mt-3">
+                                                <button onClick={() => { navigator.clipboard.writeText('python -m http.server 8000'); showNotification('Copied: python -m http.server 8000'); }} className="flex-1 bg-white border border-amber-200 rounded px-3 py-2 text-xs font-bold">Copy Python</button>
+                                                <button onClick={() => { navigator.clipboard.writeText('npx http-server -p 8080'); showNotification('Copied: npx http-server -p 8080'); }} className="flex-1 bg-white border border-amber-200 rounded px-3 py-2 text-xs font-bold">Copy npx</button>
+                                            </div>
+                                            <div className="mt-2 text-[11px] text-amber-700">After starting the server, open the site at the printed URL and retry the camera.</div>
+                                        </div>
+                                    )}
                                     {!scanResult && (
                                         <div className={`w-full max-w-md p-6 rounded-[2rem] border-2 ${awaitingTrackingFor ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-200'}`}>
                                             <h3 className={`text-center font-bold text-sm uppercase tracking-widest mb-6 ${awaitingTrackingFor ? 'text-amber-700' : 'text-slate-500'}`}>
                                                 {awaitingTrackingFor ? `Scan Tracking For: ${awaitingTrackingFor.id}` : `Scan Order QR Code`}
                                             </h3>
                                             
-                                            <div className="w-full rounded-2xl overflow-hidden min-h-[280px] shadow-sm bg-white relative border border-slate-200">
-                                                <div id="reader" className="w-full min-h-[280px]"></div>
-                                            </div>
+                                            <div className={`${isMobileView ? 'flex-1 flex flex-col w-full overflow-hidden' : 'w-full rounded-2xl overflow-hidden min-h-[280px] shadow-sm bg-white relative border border-slate-200'}`}>
+                                                    <div id="reader" className={`${isMobileView ? 'w-full h-full' : 'w-full min-h-[280px]'}`}></div>
+                                                </div>
 
                                             {scannerStatus && <p className="mt-3 text-center text-xs font-semibold text-slate-500">{scannerStatus}</p>}
                                             {scannerError && (
@@ -2541,6 +3025,11 @@
                                                 <button type="button" onClick={() => { setScannerError(''); setScannerStatus('Retrying camera...'); void startScanner(); }} className="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50">
                                                     Retry Camera
                                                 </button>
+                                                {isMobileView && (
+                                                    <button type="button" onClick={() => { setScannerError(''); enterFullscreenAndStart(); }} className="flex-1 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 text-sm font-bold transition-colors">
+                                                        Start Fullscreen Scan
+                                                    </button>
+                                                )}
                                             </div>
 
                                             <div className="mt-8 border-t border-slate-200 pt-6">
@@ -2724,6 +3213,22 @@
                                         </div>
                                     </div>
 
+                                    {/* Loyalty Settings */}
+                                    <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200">
+                                        <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest mb-5">Loyalty Settings</h3>
+                                        <div className="flex items-center justify-between gap-4">
+                                            <div>
+                                                <div className="text-sm font-bold">Auto-add Loyalty Points</div>
+                                                <div className="text-xs text-slate-500">Automatically award loyalty points when a bill is saved.</div>
+                                            </div>
+                                            <div>
+                                                <label className="flex items-center gap-3">
+                                                    <input type="checkbox" checked={autoAddPoints} onChange={e => { setAutoAddPoints(e.target.checked); localStorage.setItem('autoAddPoints', e.target.checked ? 'true' : 'false'); }} className="w-5 h-5" />
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+
                                     {/* Integrations */}
                                     <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-5">
                                         <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest mb-2">Integrations</h3>
@@ -2768,6 +3273,8 @@
                 </div>
             );
         }
+
+                    
 
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
