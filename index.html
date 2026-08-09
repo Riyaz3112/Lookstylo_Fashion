@@ -127,6 +127,29 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
+        const parseJsonSafe = (value, fallback) => {
+            try { return value ? JSON.parse(value) : fallback; } catch (e) { return fallback; }
+        };
+
+        const parseStorageJson = (value, fallback) => {
+            try {
+                if (value === null || value === undefined) return fallback;
+                if (typeof value !== 'string') return value;
+                const trimmed = value.trim();
+                if (!trimmed) return fallback;
+                if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+                    return JSON.parse(trimmed);
+                }
+                if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+                    const inner = JSON.parse(trimmed);
+                    return parseStorageJson(inner, fallback);
+                }
+                return value;
+            } catch (e) {
+                return fallback;
+            }
+        };
+
         const generateSafeId = () => {
             if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
             return 'id-' + Math.random().toString(36).substr(2, 9) + '-' + Date.now();
@@ -1508,29 +1531,6 @@
                     setSyncStatus('Successfully saved to Google Sheets!');
                     setTimeout(() => setScanResult(null), 3000);
                 } catch (error) { setSyncStatus('Failed to sync. Check console.'); }
-            };
-
-            const parseJsonSafe = (value, fallback) => {
-                try { return value ? JSON.parse(value) : fallback; } catch (e) { return fallback; }
-            };
-
-            const parseStorageJson = (value, fallback) => {
-                try {
-                    if (value === null || value === undefined) return fallback;
-                    if (typeof value !== 'string') return value;
-                    const trimmed = value.trim();
-                    if (!trimmed) return fallback;
-                    if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
-                        return JSON.parse(trimmed);
-                    }
-                    if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
-                        const inner = JSON.parse(trimmed);
-                        return parseStorageJson(inner, fallback);
-                    }
-                    return value;
-                } catch (e) {
-                    return fallback;
-                }
             };
 
             const stringifyIfNeeded = (value) => {
