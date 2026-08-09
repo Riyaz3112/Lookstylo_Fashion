@@ -385,17 +385,7 @@
             };
 
             const [activeTab, setActiveTab] = useState('billing'); 
-            const [sheetUrl, setSheetUrl] = useState(localStorage.getItem('googleSheetUrl') || '');
             const [serverUrl, setServerUrl] = useState(localStorage.getItem('serverUrl') || '/api/save-label');
-            const [sheetSyncStatus, setSheetSyncStatus] = useState('');
-            const [sheetLoadStatus, setSheetLoadStatus] = useState('');
-            const [lastSyncedAt, setLastSyncedAt] = useState(localStorage.getItem('lastSyncedAt') || 'Never');
-            const [autoSyncEnabled, setAutoSyncEnabled] = useState(localStorage.getItem('autoSyncEnabled') === 'true');
-            const [autoSyncIntervalMinutes, setAutoSyncIntervalMinutes] = useState(() => {
-                const savedValue = parseInt(localStorage.getItem('autoSyncIntervalMinutes') || '5', 10);
-                return Number.isNaN(savedValue) || savedValue < 1 ? 5 : savedValue;
-            });
-            const [autoSyncStatus, setAutoSyncStatus] = useState('');
             const [logoUrl, setLogoUrl] = useState(localStorage.getItem('logoUrl') || ''); 
             const [storeName, setStoreName] = useState(localStorage.getItem('storeName') || 'LOOKSTYLO FASHION');
             // Default to WA Business for robust messaging
@@ -1112,7 +1102,6 @@
                 _setAwaitingTrackingFor(val);
             };
 
-            const [syncStatus, setSyncStatus] = useState('');
             const [savedScans, setSavedScans] = useState(() => JSON.parse(localStorage.getItem('savedScans') || '[]'));
             const scannerRef = useRef(null);
             const [manualCode, setManualCode] = useState('');
@@ -1543,120 +1532,11 @@
                 } else showNotification('Label details saved locally!');
             };
 
-            const syncToGoogleSheets = async () => {
-                if (!sheetUrl) return showNotification('Configure Webhook URL in Settings!');
-                setSyncStatus('Syncing...');
-                try {
-                    await fetch(sheetUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(scanResult) });
-                    const timestamp = new Date().toLocaleString();
-                    setLastSyncedAt(timestamp);
-                    localStorage.setItem('lastSyncedAt', timestamp);
-                    setSyncStatus('Successfully saved to Google Sheets!');
-                    setTimeout(() => setScanResult(null), 3000);
-                } catch (error) { setSyncStatus('Failed to sync. Check console.'); }
-            };
-
-            const stringifyIfNeeded = (value) => {
-                if (value === null || value === undefined) return null;
-                if (typeof value === 'string') return value;
-                try { return JSON.stringify(value); } catch (e) { return String(value); }
-            };
-
-            const getGoogleSheetsBackupData = () => ({
-                savedBills: parseJsonSafe(localStorage.getItem('savedBills'), []),
-                inventory: parseJsonSafe(localStorage.getItem('lookstylo_inv_v2') || localStorage.getItem('inventory'), []),
-                shopExpenses: parseJsonSafe(localStorage.getItem('shopExpenses'), []),
-                customers: parseJsonSafe(localStorage.getItem('customers'), {}),
-                invoiceCounters: parseJsonSafe(localStorage.getItem('invoiceCounters'), {}),
-                savedScans: parseJsonSafe(localStorage.getItem('savedScans'), []),
-                logoUrl: localStorage.getItem('logoUrl') || '',
-                storeName: localStorage.getItem('storeName') || '',
-                invCategories: parseJsonSafe(localStorage.getItem('lookstylo_categories'), []),
-                auth: parseJsonSafe(localStorage.getItem('lookstylo_auth'), {})
-            });
-
-            const syncLocalDataToGoogleSheets = async () => {
-                if (!sheetUrl) return showNotification('Configure Webhook URL in Settings!');
-                setSheetSyncStatus('Syncing local data to Google Sheets...');
-                try {
-                    await fetch(sheetUrl, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(getGoogleSheetsBackupData()) });
-                    const timestamp = new Date().toLocaleString();
-                    setLastSyncedAt(timestamp);
-                    localStorage.setItem('lastSyncedAt', timestamp);
-                    setSheetSyncStatus('Local data successfully synced to Google Sheets!');
-                } catch (error) {
-                    console.error('Google Sheets sync failed:', error);
-                    setSheetSyncStatus('Failed to sync local data. Check console.');
-                }
-            };
-
-            const loadDataFromGoogleSheets = async () => {
-                if (!sheetUrl) return showNotification('Configure Webhook URL in Settings!');
-                setSheetLoadStatus('Loading data from Google Sheets...');
-                try {
-                    const response = await fetch(sheetUrl, { method: 'GET', headers: { 'Accept': 'application/json' } });
-                    if (!response.ok) throw new Error(`Google Sheets load failed: ${response.status}`);
-                    let data;
-                    try {
-                        data = await response.json();
-                    } catch (jsonError) {
-                        const text = await response.text();
-                        data = parseStorageJson(text, {});
-                    }
-                    if (typeof data === 'string') {
-                        data = parseStorageJson(data, {});
-                    }
-                    if (!data || typeof data !== 'object') {
-                        throw new Error('Invalid data format returned from webhook');
-                    }
-
-                    const saveValue = (key, rawValue) => {
-                        const parsed = parseStorageJson(rawValue, null);
-                        if (parsed !== null) localStorage.setItem(key, JSON.stringify(parsed));
+const stringifyIfNeeded = (value) => {
+                        if (value === null || value === undefined) return null;
+                        if (typeof value === 'string') return value;
+                        try { return JSON.stringify(value); } catch (e) { return String(value); }
                     };
-
-                    if (data.savedBills !== undefined) saveValue('savedBills', data.savedBills);
-                    if (data.inventory !== undefined) saveValue('lookstylo_inv_v2', data.inventory);
-                    if (data.shopExpenses !== undefined) saveValue('shopExpenses', data.shopExpenses);
-                    if (data.customers !== undefined) saveValue('customers', data.customers);
-                    if (data.invoiceCounters !== undefined) saveValue('invoiceCounters', data.invoiceCounters);
-                    if (data.savedScans !== undefined) saveValue('savedScans', data.savedScans);
-                    if (typeof data.logoUrl === 'string') localStorage.setItem('logoUrl', data.logoUrl);
-                    if (typeof data.storeName === 'string') localStorage.setItem('storeName', data.storeName);
-                    if (data.invCategories !== undefined) saveValue('lookstylo_categories', data.invCategories);
-                    if (data.auth !== undefined) saveValue('lookstylo_auth', data.auth);
-
-                    setSheetLoadStatus('Google Sheets data loaded successfully. Reloading...');
-                    window.location.reload();
-                } catch (error) {
-                    console.error('Google Sheets load failed:', error);
-                    setSheetLoadStatus('Failed to load Google Sheets data. Check console.');
-                }
-            };
-
-            useEffect(() => {
-                if (!autoSyncEnabled) {
-                    setAutoSyncStatus('Auto sync disabled.');
-                    return;
-                }
-
-                if (!sheetUrl) {
-                    setAutoSyncStatus('Enter Google Sheets Webhook URL to enable auto sync.');
-                    return;
-                }
-
-                const intervalMs = Math.max(1, Number(autoSyncIntervalMinutes)) * 60 * 1000;
-                setAutoSyncStatus(`Auto sync active every ${autoSyncIntervalMinutes} minute${autoSyncIntervalMinutes === 1 ? '' : 's'}.`);
-
-                const syncTask = async () => {
-                    setSheetSyncStatus('Auto-syncing local data...');
-                    await syncLocalDataToGoogleSheets();
-                };
-
-                syncTask();
-                const timerId = setInterval(syncTask, intervalMs);
-                return () => clearInterval(timerId);
-            }, [autoSyncEnabled, autoSyncIntervalMinutes, sheetUrl]);
 
             const handleLogoUpload = async (e) => {
                 const file = e.target.files[0];
@@ -3262,16 +3142,11 @@
                                                     Out For Delivery
                                                 </button>
                                                 <div className="flex gap-3 pt-3 mt-1 border-t border-slate-100">
-                                                    <button onClick={syncToGoogleSheets} className="flex-1 bg-white hover:bg-slate-50 text-indigo-600 border border-indigo-200 font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2 text-sm">
-                                                        <Icons.Upload className="w-4 h-4" /> Sync
-                                                    </button>
                                                     <button onClick={() => setScanResult(null)} className="flex-1 bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 font-bold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2 text-sm">
                                                         <Icons.Refresh className="w-4 h-4" /> Next
                                                     </button>
                                                 </div>
                                             </div>
-                                            
-                                            {syncStatus && <p className={`mt-6 text-center text-xs font-bold uppercase tracking-wider py-3 rounded-xl ${syncStatus.includes('Successfully') ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-red-50 text-red-500 border border-red-100'}`}>{syncStatus}</p>}
                                         </div>
                                     )}
                                 </div>
@@ -3415,38 +3290,6 @@
                                     {/* Integrations */}
                                     <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-5">
                                         <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest mb-2">Integrations</h3>
-                                        <div>
-                                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 ml-1">Google Sheets Webhook URL</label>
-                                            <textarea rows="2" value={sheetUrl} onChange={e => { setSheetUrl(e.target.value); localStorage.setItem('googleSheetUrl', e.target.value); }} placeholder="https://script.google.com/macros/s/..." className="w-full p-4 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all font-mono text-[11px] text-slate-700 shadow-sm resize-none"></textarea>
-                                        </div>
-                                                                <div className="grid gap-3 sm:grid-cols-2">
-                                            <button onClick={syncLocalDataToGoogleSheets} className="w-full bg-white border border-indigo-200 hover:bg-indigo-50 text-indigo-700 font-bold py-3 px-4 rounded-xl transition-colors shadow-sm text-sm">
-                                                <Icons.Upload className="w-4 h-4 mr-2" /> Sync Local Data
-                                            </button>
-                                            <button onClick={loadDataFromGoogleSheets} className="w-full bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold py-3 px-4 rounded-xl transition-colors shadow-sm text-sm">
-                                                <Icons.Download className="w-4 h-4 mr-2" /> Load From Google Sheets
-                                            </button>
-                                        </div>
-                                        <div className="mt-5 bg-white p-4 rounded-2xl border border-slate-200">
-                                            <div className="flex items-center justify-between gap-3 mb-3">
-                                                <div>
-                                                    <p className="text-sm font-bold text-slate-800 uppercase tracking-widest">Auto Sync</p>
-                                                    <p className="text-xs text-slate-500">Automatically sync local data to Google Sheets.</p>
-                                                </div>
-                                                <label className="flex items-center gap-2 text-slate-700 font-bold">
-                                                    <input type="checkbox" checked={autoSyncEnabled} onChange={e => { const enabled = e.target.checked; setAutoSyncEnabled(enabled); localStorage.setItem('autoSyncEnabled', enabled ? 'true' : 'false'); if (!enabled) setAutoSyncStatus('Auto sync disabled.'); }} className="w-4 h-4" />
-                                                    Enable
-                                                </label>
-                                            </div>
-                                            <div className="grid gap-3 sm:grid-cols-2">
-                                                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Sync Interval (mins)</label>
-                                                <input type="number" min="1" value={autoSyncIntervalMinutes} onChange={e => { const value = Number(e.target.value); const normalized = value < 1 ? 1 : value; setAutoSyncIntervalMinutes(normalized); localStorage.setItem('autoSyncIntervalMinutes', String(normalized)); }} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800" />
-                                            </div>
-                                            {autoSyncStatus && <p className="mt-3 text-sm text-slate-600 font-semibold">{autoSyncStatus}</p>}
-                                            <p className="mt-2 text-sm text-slate-500">Last synced: <span className="font-bold text-slate-700">{lastSyncedAt}</span></p>
-                                        </div>
-                                        {sheetSyncStatus && <p className="mt-3 text-sm font-bold uppercase tracking-wider text-indigo-700">{sheetSyncStatus}</p>}
-                                        {sheetLoadStatus && <p className="mt-2 text-sm font-bold uppercase tracking-wider text-emerald-700">{sheetLoadStatus}</p>}
                                         <div>
                                             <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 ml-1">Backend Server URL</label>
                                             <input type="text" value={serverUrl} onChange={e => { setServerUrl(e.target.value); localStorage.setItem('serverUrl', e.target.value); }} placeholder="/api/save-label" className="w-full p-4 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all font-mono text-[11px] text-slate-700 shadow-sm" />
