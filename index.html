@@ -760,6 +760,11 @@
                 return `LSF-${month}-${String(currentSeq).padStart(3, '0')}`;
             };
 
+            const generateInvoice = (date = new Date()) => {
+                const dateString = date instanceof Date ? date.toISOString().split('T')[0] : date;
+                return getNextInvoiceId(dateString);
+            };
+
             const lDraft = JSON.parse(localStorage.getItem('labelDraft') || '{}');
             const bDraft = JSON.parse(localStorage.getItem('billingDraft') || '{}');
 
