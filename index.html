@@ -506,18 +506,18 @@
             // ✨ BACKUP & RESTORE DATA EXPORT/IMPORT
             const exportData = () => {
                 const backupData = {
-                    savedBills: localStorage.getItem('savedBills'),
-                    inventory: localStorage.getItem('lookstylo_inv_v2') || localStorage.getItem('inventory'),
-                    shopExpenses: localStorage.getItem('shopExpenses'),
-                    customers: localStorage.getItem('customers'),
-                    invoiceCounters: localStorage.getItem('invoiceCounters'),
-                    savedScans: localStorage.getItem('savedScans'),
-                    logoUrl: localStorage.getItem('logoUrl'),
-                    storeName: localStorage.getItem('storeName'),
-                    invCategories: localStorage.getItem('lookstylo_categories'),
-                    auth: localStorage.getItem('lookstylo_auth')
+                    savedBills: parseStorageJson(localStorage.getItem('savedBills'), []),
+                    inventory: parseStorageJson(localStorage.getItem('lookstylo_inv_v2') || localStorage.getItem('inventory'), []),
+                    shopExpenses: parseStorageJson(localStorage.getItem('shopExpenses'), []),
+                    customers: parseStorageJson(localStorage.getItem('customers'), {}),
+                    invoiceCounters: parseStorageJson(localStorage.getItem('invoiceCounters'), {}),
+                    savedScans: parseStorageJson(localStorage.getItem('savedScans'), []),
+                    logoUrl: localStorage.getItem('logoUrl') || '',
+                    storeName: localStorage.getItem('storeName') || '',
+                    invCategories: parseStorageJson(localStorage.getItem('lookstylo_categories'), []),
+                    auth: parseStorageJson(localStorage.getItem('lookstylo_auth'), {})
                 };
-                const blob = new Blob([JSON.stringify(backupData)], { type: "application/json" });
+                const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: "application/json" });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
@@ -535,25 +535,32 @@
                 reader.onload = (event) => {
                     try {
                         const data = JSON.parse(event.target.result);
-                        if(data.savedBills) localStorage.setItem('savedBills', data.savedBills);
-                        if(data.inventory) {
+                        const saveObject = (key, rawValue) => {
+                            const value = stringifyIfNeeded(rawValue);
+                            if (value !== null) localStorage.setItem(key, value);
+                        };
+                        if (data.savedBills) saveObject('savedBills', data.savedBills);
+                        if (data.inventory) {
+                            const invValue = typeof data.inventory === 'string' ? data.inventory : JSON.stringify(data.inventory);
                             try {
-                                const parsedInv = JSON.parse(data.inventory);
-                                if (!Array.isArray(parsedInv)) {
-                                    localStorage.setItem('inventory', data.inventory);
+                                const parsedInv = JSON.parse(invValue);
+                                if (Array.isArray(parsedInv)) {
+                                    localStorage.setItem('lookstylo_inv_v2', invValue);
                                 } else {
-                                    localStorage.setItem('lookstylo_inv_v2', data.inventory);
+                                    localStorage.setItem('inventory', invValue);
                                 }
-                            } catch(e) {}
+                            } catch (e) {
+                                saveObject('inventory', data.inventory);
+                            }
                         }
-                        if(data.shopExpenses) localStorage.setItem('shopExpenses', data.shopExpenses);
-                        if(data.customers) localStorage.setItem('customers', data.customers);
-                        if(data.invoiceCounters) localStorage.setItem('invoiceCounters', data.invoiceCounters);
-                        if(data.savedScans) localStorage.setItem('savedScans', data.savedScans);
-                        if(data.logoUrl) localStorage.setItem('logoUrl', data.logoUrl);
-                        if(data.storeName) localStorage.setItem('storeName', data.storeName);
-                        if(data.invCategories) localStorage.setItem('lookstylo_categories', data.invCategories);
-                        if(data.auth) localStorage.setItem('lookstylo_auth', data.auth);
+                        if (data.shopExpenses) saveObject('shopExpenses', data.shopExpenses);
+                        if (data.customers) saveObject('customers', data.customers);
+                        if (data.invoiceCounters) saveObject('invoiceCounters', data.invoiceCounters);
+                        if (data.savedScans) saveObject('savedScans', data.savedScans);
+                        if (data.logoUrl) saveObject('logoUrl', data.logoUrl);
+                        if (data.storeName) saveObject('storeName', data.storeName);
+                        if (data.invCategories) saveObject('lookstylo_categories', data.invCategories);
+                        if (data.auth) saveObject('lookstylo_auth', data.auth);
                         
                         alert("Data imported successfully! The app will now reload to apply your data.");
                         window.location.reload();
@@ -731,8 +738,8 @@
             };
 
             const [savedBills, setSavedBills] = useState(() => {
-                const existing = JSON.parse(localStorage.getItem('savedBills') || 'null');
-                if (existing && existing.length > 0) return existing;
+                const existing = parseStorageJson(localStorage.getItem('savedBills'), null);
+                if (Array.isArray(existing) && existing.length > 0) return existing;
                 const initialBills = [];
                 for (let i = 1; i <= 19; i++) {
                     initialBills.push({
@@ -1507,6 +1514,31 @@
                 try { return value ? JSON.parse(value) : fallback; } catch (e) { return fallback; }
             };
 
+            const parseStorageJson = (value, fallback) => {
+                try {
+                    if (value === null || value === undefined) return fallback;
+                    if (typeof value !== 'string') return value;
+                    const trimmed = value.trim();
+                    if (!trimmed) return fallback;
+                    if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+                        return JSON.parse(trimmed);
+                    }
+                    if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+                        const inner = JSON.parse(trimmed);
+                        return parseStorageJson(inner, fallback);
+                    }
+                    return value;
+                } catch (e) {
+                    return fallback;
+                }
+            };
+
+            const stringifyIfNeeded = (value) => {
+                if (value === null || value === undefined) return null;
+                if (typeof value === 'string') return value;
+                try { return JSON.stringify(value); } catch (e) { return String(value); }
+            };
+
             const getGoogleSheetsBackupData = () => ({
                 savedBills: parseJsonSafe(localStorage.getItem('savedBills'), []),
                 inventory: parseJsonSafe(localStorage.getItem('lookstylo_inv_v2') || localStorage.getItem('inventory'), []),
@@ -1542,12 +1574,18 @@
                     const response = await fetch(sheetUrl, { method: 'GET', headers: { 'Accept': 'application/json' } });
                     if (!response.ok) throw new Error(`Google Sheets load failed: ${response.status}`);
                     const data = await response.json();
-                    if (data.savedBills) localStorage.setItem('savedBills', JSON.stringify(data.savedBills));
-                    if (data.inventory) localStorage.setItem('lookstylo_inv_v2', JSON.stringify(data.inventory));
-                    if (data.shopExpenses) localStorage.setItem('shopExpenses', JSON.stringify(data.shopExpenses));
-                    if (data.customers) localStorage.setItem('customers', JSON.stringify(data.customers));
-                    if (data.invoiceCounters) localStorage.setItem('invoiceCounters', JSON.stringify(data.invoiceCounters));
-                    if (data.savedScans) localStorage.setItem('savedScans', JSON.stringify(data.savedScans));
+                    const parsedSavedBills = parseStorageJson(data.savedBills, null);
+                    if (Array.isArray(parsedSavedBills)) localStorage.setItem('savedBills', JSON.stringify(parsedSavedBills));
+                    const parsedInventory = parseStorageJson(data.inventory, null);
+                    if (parsedInventory) localStorage.setItem('lookstylo_inv_v2', JSON.stringify(parsedInventory));
+                    const parsedShopExpenses = parseStorageJson(data.shopExpenses, null);
+                    if (parsedShopExpenses) localStorage.setItem('shopExpenses', JSON.stringify(parsedShopExpenses));
+                    const parsedCustomers = parseStorageJson(data.customers, null);
+                    if (parsedCustomers) localStorage.setItem('customers', JSON.stringify(parsedCustomers));
+                    const parsedInvoiceCounters = parseStorageJson(data.invoiceCounters, null);
+                    if (parsedInvoiceCounters) localStorage.setItem('invoiceCounters', JSON.stringify(parsedInvoiceCounters));
+                    const parsedSavedScans = parseStorageJson(data.savedScans, null);
+                    if (parsedSavedScans) localStorage.setItem('savedScans', JSON.stringify(parsedSavedScans));
                     if (typeof data.logoUrl === 'string') localStorage.setItem('logoUrl', data.logoUrl);
                     if (typeof data.storeName === 'string') localStorage.setItem('storeName', data.storeName);
                     if (data.invCategories) localStorage.setItem('lookstylo_categories', JSON.stringify(data.invCategories));
