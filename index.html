@@ -7,7 +7,7 @@
     <meta name="theme-color" content="#0f172a">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>Lookstylo Fashion</title>
+    <title>SHARIFF ENTERPRISES</title>
     <link rel="manifest" id="dynamic-manifest" />
     
     <!-- Premium Google Font -->
@@ -44,7 +44,7 @@
         body { background-color: #f8fafc; font-family: 'Outfit', sans-serif; }
         
         .a5-container {
-            width: 148mm; height: 210mm; background: white;
+            width: 210mm; height: 297mm; background: white;
             box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
             margin: 0 auto; padding: 8mm; box-sizing: border-box;
             position: relative; display: flex; flex-direction: column;
@@ -66,7 +66,7 @@
             .no-print { display: none !important; }
             #root, .min-h-screen, main { display: block !important; padding: 0 !important; margin: 0 !important; max-width: none !important; height: auto !important; min-height: 0 !important; overflow: visible !important; }
             .print-section { position: static !important; width: 100% !important; margin: 0 !important; padding: 0 !important; display: block !important; background: white !important; box-shadow: none !important; border: none !important; overflow: visible !important; }
-            .a5-container { width: 148mm !important; height: 209mm !important; box-sizing: border-box !important; box-shadow: none !important; border: none !important; margin: 0 !important; padding: 8mm !important; page-break-after: always; break-after: page; page-break-inside: avoid; transform: none !important; overflow: hidden !important; border-radius: 0 !important; display: flex !important; }
+            .a5-container { width: 210mm !important; height: 297mm !important; box-sizing: border-box !important; box-shadow: none !important; border: none !important; margin: 0 !important; padding: 8mm !important; page-break-after: always; break-after: page; page-break-inside: avoid; transform: none !important; overflow: hidden !important; border-radius: 0 !important; display: flex !important; }
             .a5-container:last-of-type, .print-section > div:last-child { page-break-after: auto !important; break-after: auto !important; }
             .print\:flex { display: flex !important; }
             .paid-seal { opacity: 0.2 !important; border-width: 4px !important; }
@@ -271,19 +271,18 @@
                     <div className="mb-4">
                         <h3 className="font-extrabold text-[14px] uppercase mb-1">FROM:</h3>
                         <div className="font-bold text-[11px] leading-tight uppercase">
-                            <div>LOOKSTYLO FASHION</div>
-                            <div className="mt-0.5">No 18, Sacred Heart College Shopping Complex</div>
-                            <div>Opposite Poorvika Vaniyambadi Main Road</div>
-                            <div>Tirupathur District - 635 601</div>
-                            <div className="mt-0.5">Tirupathur Branch: 📞 8680857511</div>
-                            <div>Jolarpattai Branch: 📞 6380818578</div>
+                            <div>SHARIFF ENTERPRISES</div>
+                            <div className="mt-0.5">GROUND FLOOR 362/1A N/A AARIF NAGAR</div>
+                            <div>Tirupathur</div>
+                            <div className="mt-0.5">Tirupathur, Tamil Nadu-635601</div>
+                            <div>India</div>
+                            <div className="mt-0.5">Contact No. : 6380818578</div>
+                            <div>GSTIN : 33NEYPS4388G1ZC</div>
+                            <div>State: 33-Tamil Nadu</div>
                         </div>
-                    </div>
-                    
-                    <div className="mb-3">
                         <h3 className="font-extrabold text-[15px] uppercase mb-1">TO,</h3>
                         <div className="font-bold text-[12px] leading-tight uppercase">
-                                {toName || ' '}<br/>
+                            {toName || ' '}<br/>
                             {toAddress ? toAddress.split('\n').map((line, i) => <React.Fragment key={i}>{line}<br/></React.Fragment>) : ' '}<br/>
                             {toPhone ? `📞 ${toPhone}` : ' '}
                         </div>
@@ -292,9 +291,13 @@
                     {(billName || billAddress || billPhone || billGSTIN) && (
                         <div className="mb-3 pt-2 border-t border-dashed border-gray-400">
                             <h3 className="font-extrabold text-[13px] uppercase mb-1">BILL TO,</h3>
-                            <div className="font-bold text-[10px] leading-tight uppercase text-gray-700">
-                                {billName || ' '}<br/>{billAddress ? billAddress.split('\n').map((line, i) => <React.Fragment key={i}>{line}<br/></React.Fragment>) : ' '}<br/>{billPhone || ' '}
-                                {billGSTIN && (<><br/><span className="text-[10px] font-bold">GSTIN: {billGSTIN}</span></>)}
+                            <div className="font-bold text-[10px] leading-tight uppercase text-gray-700 space-y-1">
+                                <div><span className="text-[8px] tracking-[0.2em] text-gray-500">Name</span><br/>{billName || ' '}</div>
+                                {billAddress && (
+                                    <div><span className="text-[8px] tracking-[0.2em] text-gray-500">Address</span><br/>{billAddress.split('\n').map((line, i) => <React.Fragment key={i}>{line}<br/></React.Fragment>)}</div>
+                                )}
+                                {billPhone && <div><span className="text-[8px] tracking-[0.2em] text-gray-500">Phone</span><br/>{billPhone}</div>}
+                                {billGSTIN && <div><span className="text-[8px] tracking-[0.2em] text-gray-500">GSTIN</span><br/>{billGSTIN}</div>}
                             </div>
                         </div>
                     )}
@@ -312,7 +315,7 @@
                     <div className="mb-4 bg-white p-2 rounded"><Barcode value={orderId || '0000'} /></div>
                     <div className="flex items-center justify-between w-full font-bold text-lg text-brand-red uppercase px-4">
                         <div className="flex items-center gap-1.5"><InstagramIcon className="w-6 h-6" /> LOOKSTLYO_MENSWEAR</div>
-                        <div className="flex items-center gap-1.5"><WhatsAppIcon className="w-6 h-6" /> 8680857511</div>
+                        <div className="flex items-center gap-1.5"><WhatsAppIcon className="w-6 h-6" /> 6380818578</div>
                     </div>
                 </div>
             </div>
@@ -948,7 +951,29 @@
 
             const handleScannedTracking = (order, trackingId) => {
                 setSavedScans(prev => {
-                    const updated = prev.map(s => s.id === order.id ? { ...s, trackingId } : s);
+                    const now = new Date().toLocaleString();
+                    const existingIndex = prev.findIndex(s => s.id === order.id);
+                    if (existingIndex >= 0) {
+                        const updated = prev.map(s => s.id === order.id ? {
+                            ...s,
+                            trackingId,
+                            scanDate: s.scanDate || now,
+                            name: s.name || order.name || order.customer || '',
+                            phone: s.phone || order.phone || ''
+                        } : s);
+                        localStorage.setItem('savedScans', JSON.stringify(updated));
+                        return updated;
+                    }
+
+                    const newScan = {
+                        id: order.id,
+                        scanId: generateSafeId(),
+                        scanDate: now,
+                        name: order.name || order.customer || '',
+                        phone: order.phone || '',
+                        trackingId
+                    };
+                    const updated = [newScan, ...prev];
                     localStorage.setItem('savedScans', JSON.stringify(updated));
                     return updated;
                 });
@@ -960,7 +985,7 @@
                     return; 
                 }
 
-                const msg = `*LOOKSTYLO FASHION*\n\nDear ${order.name || 'Customer'},\nYour order (${order.id}) has been successfully dispatched! 🚚\n\n*Tracking ID:* ${trackingId}\n\nYou can use this ID to track your package on the courier website.\n\nThank you for shopping with us!`;
+                const msg = `*LOOKSTYLO FASHION*\n\nDear ${order.name || order.customer || 'Customer'},\nYour order (${order.id}) has been successfully dispatched! 🚚\n\n*Tracking ID:* ${trackingId}\n\nYou can use this ID to track your package on the courier website.\n\nThank you for shopping with us!`;
                 openWhatsAppMsg(phone, msg);
                 showNotification("Tracking Saved & WhatsApp Sent!");
             };
@@ -1678,7 +1703,14 @@ const stringifyIfNeeded = (value) => {
             };
 
             const renderBillContent = (copyLabel) => {
-                let deliveryText = billDelivery === 'Courier' ? (billTracking ? `${billCourier} (Track: ${billTracking})` : billCourier) : 'Store Walk-in';
+                const normalizedCourier = billCourier && billCourier.toLowerCase() !== 'other' ? billCourier : 'Courier Delivery';
+                let deliveryText = 'Store Walk-in';
+                if (billDelivery === 'Courier') {
+                    deliveryText = billTracking ? `${normalizedCourier} (Track: ${billTracking})` : normalizedCourier;
+                } else if (billDelivery && billDelivery.toLowerCase() !== 'store walk-in') {
+                    deliveryText = billDelivery;
+                }
+
                 let terms = billDelivery === 'Courier' 
                     ? ["Unboxing video is mandatory for any claims.", "Exchange for damaged/wrong items within 2 days of delivery.", "Shipping charges are non-refundable."] 
                     : ["Goods once sold will not be taken back."];
@@ -1690,59 +1722,69 @@ const stringifyIfNeeded = (value) => {
                 else if (billPromoCode === '5%DIS') { promoDetails = { title: "Get 5% Flat Discount on your next purchase", subtitle: "(Valid only for 10 days after receiving courier)" }; }
 
                 return (
-                    <div className="border-2 border-gray-900 w-full h-full flex flex-col relative p-4 bg-white box-border text-xs">
+                    <div className="border border-gray-700 w-full h-full flex flex-col relative p-4 bg-white box-border text-[11px] text-gray-800">
                         {copyLabel && (<div className="absolute top-0 right-0 bg-gray-900 text-white text-[9px] px-2 py-0.5 font-bold uppercase">{copyLabel}</div>)}
                         
-                        <div className="flex items-center border-b-2 border-gray-900 pb-3 mb-3 mt-2 shrink-0">
-                            <div className="w-[25%] flex justify-start items-center pl-1">
-                                {logoUrl ? (<img src={logoUrl} alt="Lookstylo Logo" className="h-24 w-24 object-contain rounded-md border border-gray-200 p-0.5" />) : (<StoreLogo className="w-16 h-16 text-gray-900" />)}
-                            </div>
-                            <div className="w-[75%] text-center pr-6">
-                                <h1 className="text-[1.6rem] font-extrabold tracking-wider text-gray-900 leading-none mb-1 font-serif mt-1">LOOKSTYLO FASHION</h1>
-                                <p className="text-[11px] text-gray-800 leading-tight mb-1">No 18, sacred heart college shopping complex<br/>opposite poorvika vaniyambadi main road tirupathur dist-635601.<br/>tirupathur branch 📞 8680857511 <br/> jolarpattai branch 📞 6380818578</p>
-                                <div className="flex justify-center items-center gap-3 font-bold text-gray-900 mt-1">
-                                    <span className="flex items-center gap-1"><WhatsAppIcon className="w-3.5 h-3.5" /> 8680857511</span> | 
-                                    <span className="flex items-center gap-1"><InstagramIcon className="w-3.5 h-3.5" /> @lookstylo_menswear</span>
+                        <div className="flex flex-col md:flex-row justify-between border-b border-gray-400 pb-2 mb-2 mt-1 shrink-0 gap-4">
+                            <div className="flex items-start gap-3">
+                                <div className="w-20 h-20 rounded-xl border border-gray-300 bg-slate-50 overflow-hidden flex items-center justify-center shrink-0">
+                                    {logoUrl ? <img src={logoUrl} alt="Company Logo" className="max-w-full max-h-full object-contain" /> : <StoreLogo className="w-12 h-12 text-gray-900" />}
                                 </div>
-                                <p className="font-bold text-gray-900 mt-1">GSTIN: 33NEYPS4388G1ZC</p>
+                                <div>
+                                    <h1 className="text-[1.3rem] font-extrabold tracking-[0.18em] text-gray-900 leading-none mb-1 font-serif">SHARIFF ENTERPRISES</h1>
+                                    <p className="text-[10px] text-gray-800 leading-tight">GROUND FLOOR 362/1A N/A AARIF</p>
+                                    <p className="text-[10px] text-gray-800 leading-tight">NAGAR Tirupathur</p>
+                                    <p className="text-[10px] text-gray-800 leading-tight">Tirupathur, Tamil Nadu-635601</p>
+                                    <p className="text-[10px] text-gray-800 leading-tight">India</p>
+                                    <p className="text-[10px] text-gray-800 leading-tight">Contact No. : 6380818578</p>
+                                    <p className="font-bold text-[10px] text-gray-900 mt-1">GSTIN : 33NEYPS4388G1ZC</p>
+                                    <p className="text-[10px] text-gray-700">State: 33-Tamil Nadu</p>
+                                </div>
+                            </div>
+                            <div className="text-right min-w-[160px]">
+                                <p className="uppercase tracking-[0.3em] text-[9px] font-bold text-gray-600">Tax Invoice</p>
+                                <p className="text-[1rem] font-black text-gray-900 mt-1">{billType === 'GST' ? 'GST Invoice' : 'Tax Invoice'}</p>
+                                <p className="text-[10px] text-gray-700 mt-1">Original</p>
                             </div>
                         </div>
 
-                        <div className="flex justify-between mb-3 font-medium shrink-0">
-                            <div className="space-y-1">
-                                <p><span className="w-14 inline-block text-gray-600">Name:</span> <span className="uppercase border-b border-gray-400 pb-0.5 inline-block min-w-[120px]">{billCustomerName || 'Walk-in Customer'}</span></p>
-                                <p><span className="w-14 inline-block text-gray-600">Phone:</span> <span className="border-b border-gray-400 pb-0.5 inline-block min-w-[120px]">{billCustomerPhone || '-'}</span></p>
-                                {/* Loyalty points for customer */}
-                                <p><span className="w-14 inline-block text-gray-600">Loyalty:</span> <span className="border-b border-gray-400 pb-0.5 inline-block min-w-[120px]">{(billCustomerPhone && customers[normalizePhoneKey(billCustomerPhone)] && customers[normalizePhoneKey(billCustomerPhone)].points) ? customers[normalizePhoneKey(billCustomerPhone)].points : availablePoints}</span></p>
-                                <div className="text-[9px] text-gray-500 mt-0.5">(5 pts per ₹1000, shown with 1-decimal)</div>
-                                {billType === 'GST' && billName && (
-                                    <p><span className="w-14 inline-block text-gray-600">Company:</span> <span className="border-b border-gray-400 pb-0.5 inline-block min-w-[120px]">{billName}</span></p>
-                                )}
-                                {billType === 'GST' && billGSTIN && (
-                                    <p><span className="w-14 inline-block text-gray-600">GSTIN:</span> <span className="border-b border-gray-400 pb-0.5 inline-block min-w-[120px]">{billGSTIN}</span></p>
-                                )}
-                                <p><span className="w-14 inline-block text-gray-600">Del:</span> <span className="border-b border-gray-400 pb-0.5 inline-block min-w-[120px] font-bold">{deliveryText}</span></p>
+                        <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_0.45fr] gap-4 mb-2 pb-2 border-b border-gray-300 shrink-0">
+                            <div>
+                                <p className="text-[9px] uppercase tracking-[0.25em] text-gray-600 font-bold mb-1">Customer / Consignee</p>
+                                <div className="text-[10px] leading-5 text-gray-800">
+                                    <p className="font-semibold uppercase text-[11px] text-gray-900">{billCustomerName || 'Walk-in Customer'}</p>
+                                    {billCustomerAddress ? (
+                                        billCustomerAddress.split('\n').map((line, i) => (
+                                            <p key={i} className="whitespace-pre-wrap mt-0.5">{line}</p>
+                                        ))
+                                    ) : (
+                                        <p className="whitespace-pre-wrap mt-0.5 text-gray-500">Address not provided</p>
+                                    )}
+                                    <p className="mt-0.5">Phone number: {billCustomerPhone || 'Not provided'}</p>
+                                </div>
                             </div>
-                            <div className="space-y-1 text-right">
-                                <p><span className="text-gray-600 mr-2">Inv No:</span> <span className="font-bold">{billInvoice}</span></p>
-                                <p><span className="text-gray-600 mr-2">Date:</span> <span>{billDate ? billDate.split('-').reverse().join('-') : ''}</span></p>
+                            <div className="text-right">
+                                <p className="text-[9px] uppercase tracking-[0.25em] text-gray-600 font-bold mb-1">Invoice Details</p>
+                                <p className="text-[10px] text-gray-800">Invoice No: <span className="font-semibold">{billInvoice}</span></p>
+                                <p className="text-[10px] text-gray-800">Date: <span className="font-semibold">{billDate ? billDate.split('-').reverse().join('-') : ''}</span></p>
+                                <p className="text-[10px] text-gray-800">Type: <span className="font-semibold">{billType === 'GST' ? 'GST Invoice' : 'Non-GST Invoice'}</span></p>
                             </div>
                         </div>
 
-                        <div className="flex-grow border-t-2 border-gray-900 flex flex-col mt-1">
+                        <div className="flex-grow border-t border-gray-400 flex flex-col mt-1">
                             <table className="w-full text-left border-collapse">
                                 <thead>
-                                    <tr className="border-b-2 border-gray-900 bg-gray-50">
-                                        <th className="py-2 px-1 font-bold w-10 text-center border-r border-gray-400">S.No</th>
-                                        <th className="py-2 px-2 font-bold border-r border-gray-400">Particulars</th>
+                                    <tr className="border-b border-gray-400 bg-gray-50">
+                                        <th className="py-2 px-1 font-bold w-10 text-center border-r border-gray-300">S.No</th>
+                                        <th className="py-2 px-2 font-bold border-r border-gray-300">Particulars</th>
                                         {billType === 'GST' && (
                                             <>
-                                                <th className="py-2 px-1 font-bold text-center w-16 border-r border-gray-400">HSN</th>
-                                                <th className="py-2 px-1 font-bold text-center w-12 border-r border-gray-400">GST</th>
+                                                <th className="py-2 px-1 font-bold text-center w-16 border-r border-gray-300">HSN / SAC</th>
+                                                <th className="py-2 px-1 font-bold text-center w-12 border-r border-gray-300">Tax</th>
                                             </>
                                         )}
-                                        <th className="py-2 px-1 font-bold text-center w-10 border-r border-gray-400">Qty</th>
-                                        <th className="py-2 px-1 font-bold text-right w-16 border-r border-gray-400">Rate</th>
+                                        <th className="py-2 px-1 font-bold text-center w-10 border-r border-gray-300">Qty</th>
+                                        <th className="py-2 px-1 font-bold text-right w-16 border-r border-gray-300">Rate</th>
                                         <th className="py-2 px-2 font-bold text-right w-20">Amount</th>
                                     </tr>
                                 </thead>
@@ -1750,92 +1792,57 @@ const stringifyIfNeeded = (value) => {
                                     {billItems.map((item, index) => {
                                         const itemTotal = (item.qty || 0) * (item.rate || 0);
                                         return (
-                                        <tr key={item.id} className="border-b border-gray-200">
-                                            <td className="py-2 px-1 text-center border-r border-gray-400">{index + 1}</td>
-                                            <td className="py-2 px-2 border-r border-gray-400 uppercase">{item.particular}</td>
-                                            {billType === 'GST' && (
-                                                <>
-                                                    <td className="py-2 px-1 text-center border-r border-gray-400">{item.hsn || '-'}</td>
-                                                    <td className="py-2 px-1 text-center border-r border-gray-400">{!item.gst || item.gst == 0 ? 'Non-GST' : `${item.gst}%`}</td>
-                                                </>
-                                            )}
-                                            <td className="py-2 px-1 text-center border-r border-gray-400">{item.qty}</td>
-                                            <td className="py-2 px-1 text-right border-r border-gray-400">{item.rate ? parseFloat(item.rate).toFixed(2) : ''}</td>
-                                            <td className="py-2 px-2 text-right">{itemTotal ? itemTotal.toFixed(2) : ''}</td>
-                                        </tr>
-                                    )})}
+                                            <tr key={item.id} className="border-b border-gray-200">
+                                                <td className="py-2 px-1 text-center border-r border-gray-300">{index + 1}</td>
+                                                <td className="py-2 px-2 border-r border-gray-300 uppercase">{item.particular}</td>
+                                                {billType === 'GST' && (
+                                                    <>
+                                                        <td className="py-2 px-1 text-center border-r border-gray-300">{item.hsn || '-'}</td>
+                                                        <td className="py-2 px-1 text-center border-r border-gray-300">{!item.gst || item.gst == 0 ? 'Non-GST' : `${item.gst}%`}</td>
+                                                    </>
+                                                )}
+                                                <td className="py-2 px-1 text-center border-r border-gray-300">{item.qty}</td>
+                                                <td className="py-2 px-1 text-right border-r border-gray-300">{item.rate ? parseFloat(item.rate).toFixed(2) : ''}</td>
+                                                <td className="py-2 px-2 text-right">{itemTotal ? itemTotal.toFixed(2) : ''}</td>
+                                            </tr>
+                                        );
+                                    })}
                                 </tbody>
                             </table>
-                            <div className="text-[9px] text-gray-500 italic py-1 px-1 border-b-2 border-gray-900 bg-gray-50 text-right mt-auto">
+                            <div className="text-[9px] text-gray-500 italic py-1 px-1 border-b border-gray-400 bg-gray-50 text-right mt-auto">
                                 * GST not included. GST extra as applicable.
                             </div>
                         </div>
 
-                        <div className="pt-2 flex justify-between mt-2 shrink-0">
-                            <div className="w-[55%] text-[10px] text-gray-600 flex flex-col justify-between">
-                                <div>
-                                    {billDescription && (
-                                        <div className="mb-2 bg-gray-50 p-1.5 rounded border border-gray-200">
-                                            <p className="font-bold text-gray-800 mb-0.5">Description / Notes:</p>
-                                            <p className="text-gray-700 whitespace-pre-wrap">{billDescription}</p>
-                                        </div>
-                                    )}
-                                    <p className="font-bold text-gray-800 mb-1">Terms & Conditions:</p>
-                                    <ul className="list-disc pl-3 space-y-0.5">{terms.map((t, i) => <li key={i}>{t}</li>)}</ul>
-                                    <p className="mt-2 text-xs italic">Thank you for shopping with us!</p>
-                                    {billPromoCode !== 'NO CODE' && (
-                                        <div className="mt-2 border-2 border-dashed border-gray-400 p-1.5 rounded bg-gray-50 text-center">
-                                            <p className="font-bold text-gray-800 text-[10px] uppercase">🎁 Online Special</p>
-                                            <p className="text-[9px] text-gray-600 mt-0.5">{promoDetails.title}</p>
-                                            <p className="text-[8px] text-gray-500 font-semibold mt-0.5 uppercase">{promoDetails.subtitle}</p>
-                                            <p className="text-[10px] font-bold mt-0.5">Use Code: <span className="text-brand-red text-xs">{billPromoCode}</span></p>
-                                        </div>
-                                    )}
-                                </div>
-                                {balanceAmount > 0 && (
-                                    <div className="mt-3 flex items-center gap-2 border-2 border-slate-300 p-1.5 rounded-lg bg-slate-50 w-fit">
-                                        <QRCodeRender data={`upi://pay?pa=9360232991@okbizaxis&pn=LOOKSTYLO%20FASHION&am=${balanceAmount.toFixed(2)}&cu=INR`} size={50} />
-                                        <div>
-                                            <p className="text-[9px] font-bold text-gray-900 leading-tight uppercase tracking-wider mb-0.5">Scan to Pay</p>
-                                            <p className="text-[11px] font-black text-indigo-700">₹ {balanceAmount.toFixed(2)}</p>
-                                        </div>
+                        <div className="pt-2 flex justify-between mt-2 shrink-0 gap-4">
+                            <div className="w-[58%] text-[10px] text-gray-600">
+                                {billDescription && (
+                                    <div className="mb-2 bg-gray-50 p-1.5 rounded border border-gray-200">
+                                        <p className="font-bold text-gray-800 mb-0.5">Description / Notes:</p>
+                                        <p className="text-gray-700 whitespace-pre-wrap">{billDescription}</p>
                                     </div>
                                 )}
+                                <p className="font-bold text-gray-800 mb-1">Terms & Conditions:</p>
+                                <ul className="list-disc pl-3 space-y-0.5">{terms.map((t, i) => <li key={i}>{t}</li>)}</ul>
                             </div>
-                            <div className="w-[45%]">
+                            <div className="w-[42%] border border-gray-300 rounded p-2">
                                 <div className="flex justify-between py-1"><span className="font-semibold">Sub Total:</span><span>₹ {subTotal.toFixed(2)}</span></div>
                                 {billDiscount > 0 && <div className="flex justify-between py-1 text-gray-700"><span>Discount ({billDiscount}%):</span><span>- ₹ {discountAmount.toFixed(2)}</span></div>}
                                 {billType === 'GST' && totalIncludedGstAmount > 0 && <div className="flex justify-between py-1 text-gray-700"><span>GST Extra:</span><span>₹ {totalIncludedGstAmount.toFixed(2)}</span></div>}
                                 {roundOffAmount !== 0 && <div className="flex justify-between py-1 text-gray-700"><span>Round Off:</span><span>{roundOffAmount > 0 ? '+ ' : '- '}₹ {Math.abs(roundOffAmount).toFixed(2)}</span></div>}
-                                <div className="flex justify-between text-sm font-bold border-t border-b border-gray-900 py-2 mt-1 bg-gray-50 px-1 mb-1"><span>Grand Total:</span><span>₹ {grandTotal.toFixed(2)}</span></div>
-                                
+                                <div className="flex justify-between text-sm font-bold border-t border-gray-400 py-2 mt-1 px-1"><span>Grand Total:</span><span>₹ {grandTotal.toFixed(2)}</span></div>
                                 {advancePayment > 0 && <div className="flex justify-between text-[11px] font-semibold text-gray-800 px-1 py-0.5"><span>Advance Paid:</span><span>₹ {(Number(advancePayment) || 0).toFixed(2)}</span></div>}
                                 <div className="flex justify-between text-[11px] font-semibold text-gray-800 px-1 py-0.5"><span>Paid (GPay):</span><span>₹ {(Number(paidGpay) || 0).toFixed(2)}</span></div>
                                 <div className="flex justify-between text-[11px] font-semibold text-gray-800 px-1 py-0.5"><span>Paid (Cash):</span><span>₹ {(Number(paidCash) || 0).toFixed(2)}</span></div>
-                                
-                                <div className="flex justify-between text-[12px] font-bold text-gray-900 mt-1 px-1 border-t border-b border-gray-300 py-1 mb-1">
+                                <div className="flex justify-between text-[12px] font-bold text-gray-900 mt-1 px-1 border-t border-gray-300 py-1">
                                     <span>Balance:</span><span>₹ {balanceAmount.toFixed(2)}</span>
                                 </div>
-                                {balanceAmount > 0 && (
-                                    <div className="mt-1.5 flex justify-end no-print">
-                                        <a href={`upi://pay?pa=9360232991@okbizaxis&pn=LOOKSTYLO%20FASHION&am=${balanceAmount}&cu=INR`} target="_blank" className="bg-indigo-600 hover:bg-indigo-700 text-white px-2 py-1.5 rounded shadow-sm text-[9px] font-bold flex items-center gap-1 uppercase tracking-wider transition-colors">
-                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.381z" clipRule="evenodd" /></svg>
-                                            Pay ₹{balanceAmount.toFixed(2)}
-                                        </a>
-                                    </div>
-                                )}
-
-                                <div className="text-[10px] text-gray-500 mt-1 px-1">Total Qty: {totalQty}</div>
                             </div>
                         </div>
                         
-                        <div className="mt-2 pt-1.5 border-t border-gray-300 text-center text-[8px] font-extrabold text-gray-500 tracking-widest uppercase shrink-0">
-                            Powered by LOOKSTLYO
+                        <div className="mt-3 pt-2 border-t border-gray-300 text-center text-[8px] font-extrabold text-gray-500 tracking-widest uppercase shrink-0">
+                            Thank you for your business
                         </div>
-                        
-                        {balanceAmount <= 0 && grandTotal > 0 && (
-                            <div className="paid-seal">PAID</div>
-                        )}
 
                         {/* -------------------- TAB: CALCULATOR -------------------- */}
                         {activeTab === 'calculator' && (
@@ -1994,7 +2001,7 @@ const stringifyIfNeeded = (value) => {
                     {activeTab === 'reports' ? (
                         <style>{`@media print { @page { size: A4 portrait; margin: 15mm; } }`}</style>
                     ) : (
-                        <style>{`@media print { @page { size: 148mm 210mm; margin: 0; } }`}</style>
+                        <style>{`@media print { @page { size: A4 portrait; margin: 15mm; } }`}</style>
                     )}
 
                     {notification && (
@@ -2275,19 +2282,34 @@ const stringifyIfNeeded = (value) => {
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                                         <ModernInput label="Invoice No." type="text" value={billInvoice} onChange={e=>setBillInvoice(e.target.value)} />
                                         <ModernInput label="Date" type="date" value={billDate} onChange={e=>setBillDate(e.target.value)} />
+                                        <div className="md:col-span-1">
+                                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 ml-1">Invoice Mode</label>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <button type="button" onClick={() => setBillType('Non-GST')} className={`py-3 rounded-2xl text-sm font-bold transition ${billType === 'Non-GST' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
+                                                    Normal Bill
+                                                </button>
+                                                <button type="button" onClick={() => setBillType('GST')} className={`py-3 rounded-2xl text-sm font-bold transition ${billType === 'GST' ? 'bg-indigo-700 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
+                                                    B2B GST
+                                                </button>
+                                            </div>
+                                        </div>
                                         <div>
                                             <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 ml-1">Bill Type</label>
                                             <select value={billType} onChange={e=>setBillType(e.target.value)} className="w-full p-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all text-sm font-bold text-slate-800 shadow-sm cursor-pointer">
-                                                <option value="Non-GST">Non-GST</option>
-                                                <option value="GST">GST Bill</option>
+                                                <option value="Non-GST">Non-GST Invoice</option>
+                                                <option value="GST">GST Invoice</option>
                                             </select>
                                         </div>
                                         <ModernInput label="Phone Number" type="text" value={billCustomerPhone} onChange={handlePhoneChange} placeholder="Enter Phone to Auto-Fill" className="md:col-span-1 border-slate-200 focus:border-indigo-500 font-mono" />
-                                        <ModernInput label="Customer Name" type="text" value={billCustomerName} onChange={e=>setBillCustomerName(e.target.value)} placeholder="Walk-in Customer" className="md:col-span-1" />
-                                        <ModernInput label="Billing / Company Name" type="text" value={billName} onChange={e=>setBillName(e.target.value)} placeholder="(Optional) Company or Firm Name" className="md:col-span-1" />
+                                        <ModernInput label="Customer / Consignee Name" type="text" value={billCustomerName} onChange={e=>setBillCustomerName(e.target.value)} placeholder="Walk-in Customer" className="md:col-span-1" />
+                                        <ModernInput label="Bill To / Company Name" type="text" value={billName} onChange={e=>setBillName(e.target.value)} placeholder="(Optional) Company or Firm Name" className="md:col-span-1" />
                                         {billType === 'GST' && (
-                                            <ModernInput label="Billing GSTIN" type="text" value={billGSTIN} onChange={e=>setBillGSTIN(e.target.value)} placeholder="Enter GSTIN for B2B" className="md:col-span-1" />
+                                            <ModernInput label="Billing GSTIN" type="text" value={billGSTIN} onChange={e=>setBillGSTIN(e.target.value)} placeholder="Enter GSTIN (B2B)" className="md:col-span-1" />
                                         )}
+                                        <div className="md:col-span-3">
+                                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 ml-1">Customer / Consignee Address</label>
+                                            <textarea rows="3" value={billCustomerAddress} onChange={e=>setBillCustomerAddress(e.target.value)} placeholder="Enter full address for this customer" className="w-full p-4 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all text-sm font-medium shadow-sm resize-none"></textarea>
+                                        </div>
                                         
                                         <div className="md:col-span-3 flex items-center gap-4 mt-2">
                                             <div className="text-sm text-slate-700 font-bold">Loyalty Points: <span className="text-indigo-700">{availablePoints}</span></div>
@@ -2321,12 +2343,6 @@ const stringifyIfNeeded = (value) => {
                                                     </select>
                                                 </div>
                                                 <ModernInput label="Tracking ID" type="text" value={billTracking} onChange={e=>setBillTracking(e.target.value)} placeholder="Tracking No." />
-                                                <div className="md:col-span-2">
-                                                    <div className="flex justify-between items-end mb-1.5 ml-1">
-                                                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider">Shipping Address (For Label)</label>
-                                                    </div>
-                                                    <textarea rows="3" value={billCustomerAddress} onChange={e=>setBillCustomerAddress(e.target.value)} placeholder="Full Delivery Address" className="w-full p-4 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all text-sm font-medium shadow-sm resize-none"></textarea>
-                                                </div>
                                             </div>
                                         )}
                                     </div>
@@ -2463,7 +2479,7 @@ const stringifyIfNeeded = (value) => {
 
                                         {billDelivery === 'Courier' && (
                                         <div className="a5-container relative print:scale-100 transform origin-top scale-[0.85] md:scale-95 transition-all hover:shadow-lg print:flex mt-4">
-                                            <LabelContent copyLabel="Shipping Label" orderId={billTracking || billInvoice} toName={billCustomerName} toAddress={billCustomerAddress} toPhone={billCustomerPhone} billName={billName} billGSTIN={billGSTIN} logoUrl={logoUrl} loyaltyPoints={(billCustomerPhone && customers[normalizePhoneKey(billCustomerPhone)] && customers[normalizePhoneKey(billCustomerPhone)].points) ? customers[normalizePhoneKey(billCustomerPhone)].points : availablePoints} />
+                                            <LabelContent copyLabel="Shipping Label" orderId={billTracking || billInvoice} toName={billCustomerName} toAddress={billCustomerAddress} toPhone={billCustomerPhone} billName={billName} billAddress={billCustomerAddress} billPhone={billCustomerPhone} billGSTIN={billGSTIN} logoUrl={logoUrl} loyaltyPoints={(billCustomerPhone && customers[normalizePhoneKey(billCustomerPhone)] && customers[normalizePhoneKey(billCustomerPhone)].points) ? customers[normalizePhoneKey(billCustomerPhone)].points : availablePoints} />
                                         </div>
                                     )}
                                 </div>
@@ -2897,7 +2913,7 @@ const stringifyIfNeeded = (value) => {
                                 </div>
                                 <div className="w-full lg:w-[60%] flex justify-center bg-slate-50 p-6 md:p-8 rounded-3xl border border-slate-200 print-section print:overflow-visible print:h-auto print:block print:p-0 print:bg-white print:border-none">
                                     <div className="a5-container hover:shadow-xl transition-shadow">
-                                        <LabelContent orderId={orderId} toName={toName} toAddress={toAddress} toPhone={toPhone} billName={billName} billGSTIN={billGSTIN} logoUrl={logoUrl} />
+                                        <LabelContent orderId={orderId} toName={toName} toAddress={toAddress} toPhone={toPhone} billName={billName} billAddress={billAddress} billPhone={billPhone} billGSTIN={billGSTIN} logoUrl={logoUrl} />
                                     </div>
                                 </div>
                             </>
