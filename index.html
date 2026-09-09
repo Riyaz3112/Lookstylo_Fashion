@@ -7,7 +7,7 @@
     <meta name="theme-color" content="#0f172a">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>SHARIFF ENTERPRISES</title>
+    <title>LOOKSTYLO FASHION</title>
     <link rel="manifest" id="dynamic-manifest" />
     
     <!-- Premium Google Font -->
@@ -21,7 +21,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/minified/html5-qrcode.min.js"></script>
+    <script src="./node_modules/html5-qrcode/minified/html5-qrcode.min.js"></script>
 
     <script>
         // Workaround for file:// protocol - disable import checks
@@ -44,7 +44,7 @@
         body { background-color: #f8fafc; font-family: 'Outfit', sans-serif; }
         
         .a5-container {
-            width: 210mm; height: 297mm; background: white;
+            width: 148mm; height: 210mm; background: white;
             box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
             margin: 0 auto; padding: 8mm; box-sizing: border-box;
             position: relative; display: flex; flex-direction: column;
@@ -66,7 +66,8 @@
             .no-print { display: none !important; }
             #root, .min-h-screen, main { display: block !important; padding: 0 !important; margin: 0 !important; max-width: none !important; height: auto !important; min-height: 0 !important; overflow: visible !important; }
             .print-section { position: static !important; width: 100% !important; margin: 0 !important; padding: 0 !important; display: block !important; background: white !important; box-shadow: none !important; border: none !important; overflow: visible !important; }
-            .a5-container { width: 210mm !important; height: 297mm !important; box-sizing: border-box !important; box-shadow: none !important; border: none !important; margin: 0 !important; padding: 8mm !important; page-break-after: always; break-after: page; page-break-inside: avoid; transform: none !important; overflow: hidden !important; border-radius: 0 !important; display: flex !important; }
+            @page { size: A5 portrait; margin: 0; }
+            .a5-container { width: 148mm !important; height: 210mm !important; box-sizing: border-box !important; box-shadow: none !important; border: none !important; margin: 0 !important; padding: 6mm !important; page-break-after: always; break-after: page; page-break-inside: avoid; transform: none !important; overflow: hidden !important; border-radius: 0 !important; display: flex !important; }
             .a5-container:last-of-type, .print-section > div:last-child { page-break-after: auto !important; break-after: auto !important; }
             .print\:flex { display: flex !important; }
             .paid-seal { opacity: 0.2 !important; border-width: 4px !important; }
@@ -251,7 +252,7 @@
             </div>
         );
 
-        const LabelContent = ({ orderId, toName, toAddress, toPhone, billName, billAddress, billPhone, billGSTIN, copyLabel, logoUrl, loyaltyPoints }) => (
+        const LabelContent = ({ orderId, toName, toAddress, toPhone, billName, billAddress, billPhone, copyLabel, logoUrl, loyaltyPoints }) => (
             <div className="border-2 border-gray-900 flex-grow flex flex-col text-black bg-white box-border w-full h-full p-4 relative">
                 {copyLabel && <div className="absolute top-0 right-0 bg-indigo-600 text-white text-[9px] px-2 py-0.5 font-bold uppercase z-10">{copyLabel}</div>}
                 <div className="flex items-center justify-between border-b-2 border-gray-900 pb-4 mb-4">
@@ -259,7 +260,6 @@
                         {logoUrl ? <img src={logoUrl} alt="Logo" className="w-24 object-contain" /> : <StoreLogo className="w-16 h-16 text-gray-900" />}
                     </div>
                     <div className="text-center flex-1 px-2">
-                        {!logoUrl && <div className="text-brand-red font-extrabold text-3xl tracking-wide uppercase">LOOKSTYLO CLOTHING</div>}
                         <div className="text-brand-blue font-bold text-xl tracking-wider uppercase mt-1">LOOKSTYLO CLOTHING</div>
                     </div>
                     <div className="w-1/4 flex justify-end">
@@ -271,14 +271,11 @@
                     <div className="mb-4">
                         <h3 className="font-extrabold text-[14px] uppercase mb-1">FROM:</h3>
                         <div className="font-bold text-[11px] leading-tight uppercase">
-                            <div>SHARIFF ENTERPRISES</div>
-                            <div className="mt-0.5">GROUND FLOOR 362/1A N/A AARIF NAGAR</div>
-                            <div>Tirupathur</div>
-                            <div className="mt-0.5">Tirupathur, Tamil Nadu-635601</div>
-                            <div>India</div>
-                            <div className="mt-0.5">Contact No. : 6380818578</div>
-                            <div>GSTIN : 33NEYPS4388G1ZC</div>
-                            <div>State: 33-Tamil Nadu</div>
+                            <div>LOOKSTYLO</div>
+                            <div className="mt-0.5">No 18, Sacred Heart College Shopping Complex</div>
+                            <div className="mt-0.5">Opposite Poorvika Vinayagam Main Road</div>
+                            <div>Tirupathur Dist - 635601</div>
+                            <div className="mt-0.5">Tirupathur Branch: 8680857511</div>
                         </div>
                         <h3 className="font-extrabold text-[15px] uppercase mb-1">TO,</h3>
                         <div className="font-bold text-[12px] leading-tight uppercase">
@@ -288,7 +285,7 @@
                         </div>
                     </div>
 
-                    {(billName || billAddress || billPhone || billGSTIN) && (
+                    {(billName || billAddress || billPhone) && (
                         <div className="mb-3 pt-2 border-t border-dashed border-gray-400">
                             <h3 className="font-extrabold text-[13px] uppercase mb-1">BILL TO,</h3>
                             <div className="font-bold text-[10px] leading-tight uppercase text-gray-700 space-y-1">
@@ -297,7 +294,6 @@
                                     <div><span className="text-[8px] tracking-[0.2em] text-gray-500">Address</span><br/>{billAddress.split('\n').map((line, i) => <React.Fragment key={i}>{line}<br/></React.Fragment>)}</div>
                                 )}
                                 {billPhone && <div><span className="text-[8px] tracking-[0.2em] text-gray-500">Phone</span><br/>{billPhone}</div>}
-                                {billGSTIN && <div><span className="text-[8px] tracking-[0.2em] text-gray-500">GSTIN</span><br/>{billGSTIN}</div>}
                             </div>
                         </div>
                     )}
@@ -315,7 +311,7 @@
                     <div className="mb-4 bg-white p-2 rounded"><Barcode value={orderId || '0000'} /></div>
                     <div className="flex items-center justify-between w-full font-bold text-lg text-brand-red uppercase px-4">
                         <div className="flex items-center gap-1.5"><InstagramIcon className="w-6 h-6" /> LOOKSTLYO_MENSWEAR</div>
-                        <div className="flex items-center gap-1.5"><WhatsAppIcon className="w-6 h-6" /> 6380818578</div>
+                        <div className="flex items-center gap-1.5"><WhatsAppIcon className="w-6 h-6" /> 8680857511</div>
                     </div>
                 </div>
             </div>
@@ -655,7 +651,6 @@
                             purchasePrice: 0,
                             stock: 10,
                             hsn: val.hsn || '',
-                            gst: val.gst || 0,
                             image: ''
                         }));
                         localStorage.setItem('lookstylo_inv_v2', JSON.stringify(migrated));
@@ -668,7 +663,7 @@
             const [isInvModalOpen, setIsInvModalOpen] = useState(false);
             const [invSearch, setInvSearch] = useState('');
             const [invCategoryFilter, setInvCategoryFilter] = useState('All');
-            const [invFormData, setInvFormData] = useState({ id: '', name: '', category: 'General', sku: '', price: '', purchasePrice: '', stock: '', hsn: '', gst: 0, image: '' });
+            const [invFormData, setInvFormData] = useState({ id: '', name: '', category: 'General', sku: '', price: '', purchasePrice: '', stock: '', hsn: '', image: '' });
 
             const handleAddCategory = () => {
                 const newCat = window.prompt("Enter new category name:");
@@ -690,7 +685,7 @@
                 if (item) {
                     setInvFormData({ ...item });
                 } else {
-                    setInvFormData({ id: '', name: '', category: invCategories[0] || 'General', sku: Math.floor(100000 + Math.random() * 900000).toString(), price: '', purchasePrice: '', stock: 0, hsn: '', gst: 0, image: '' });
+                    setInvFormData({ id: '', name: '', category: invCategories[0] || 'General', sku: Math.floor(100000 + Math.random() * 900000).toString(), price: '', purchasePrice: '', stock: 0, hsn: '', image: '' });
                 }
                 setIsInvModalOpen(true);
             };
@@ -713,7 +708,6 @@
                     price: Number(invFormData.price) || 0,
                     purchasePrice: Number(invFormData.purchasePrice) || 0,
                     stock: Number(invFormData.stock) || 0,
-                    gst: Number(invFormData.gst) || 0,
                     id: invFormData.id || generateSafeId()
                 };
 
@@ -782,10 +776,10 @@
                 const initialBills = [];
                 for (let i = 1; i <= 19; i++) {
                     initialBills.push({
-                        id: `LSF-APR-${String(i).padStart(3, '0')}`, date: '2026-04-01', type: 'Non-GST',
+                        id: `LSF-APR-${String(i).padStart(3, '0')}`, date: '2026-04-01', type: 'Standard',
                         customer: 'Pending Edit', phone: '', address: '', delivery: 'Store Walk-in',
                         courier: 'Professional Courier', tracking: '', discount: 0, promoCode: 'NO CODE',
-                        items: [{ id: generateSafeId(), particular: 'PENDING BILL UPDATE', hsn: '', gst: 0, qty: 1, rate: 0 }],
+                        items: [{ id: generateSafeId(), particular: 'PENDING BILL UPDATE', hsn: '', qty: 1, rate: 0 }],
                         total: 0, cash: 0, gpay: 0, advance: 0, balance: 0, description: ''
                     });
                 }
@@ -822,11 +816,9 @@
             const [billAddress, setBillAddress] = useState(lDraft.billAddress || '');
             const [billPhone, setBillPhone] = useState(lDraft.billPhone || '');
 
-            const [billGSTIN, setBillGSTIN] = useState(bDraft.billGSTIN || '');
-
             const [billDate, setBillDate] = useState(bDraft.billDate || todayStr);
             const [billInvoice, setBillInvoice] = useState(bDraft.billInvoice || getNextInvoiceId(bDraft.billDate || todayStr));
-            const [billType, setBillType] = useState(bDraft.billType || 'Non-GST'); 
+            const [billType, setBillType] = useState(bDraft.billType || 'Standard'); 
             const [billCustomerName, setBillCustomerName] = useState(bDraft.billCustomerName || '');
             const [billCustomerPhone, setBillCustomerPhone] = useState(bDraft.billCustomerPhone || '');
             const [billCustomerAddress, setBillCustomerAddress] = useState(bDraft.billCustomerAddress || '');
@@ -835,10 +827,11 @@
             const [billTracking, setBillTracking] = useState(bDraft.billTracking || '');
             const [billDiscount, setBillDiscount] = useState(bDraft.billDiscount || 0);
             const [billPromoCode, setBillPromoCode] = useState(bDraft.billPromoCode || 'NO CODE');
-            const [billItems, setBillItems] = useState(bDraft.billItems || [{ id: generateSafeId(), particular: '', hsn: '', gst: 0, qty: 1, rate: 0 }]);
+            const [billItems, setBillItems] = useState(bDraft.billItems || [{ id: generateSafeId(), particular: '', hsn: '', qty: 1, rate: 0 }]);
             
             const [paidGpay, setPaidGpay] = useState(bDraft.paidGpay || 0);
             const [paidCash, setPaidCash] = useState(bDraft.paidCash || 0);
+            const [paymentMode, setPaymentMode] = useState(bDraft.paymentMode || (Number(bDraft.paidGpay) > 0 && Number(bDraft.paidCash) > 0 ? 'Cash + GPay' : Number(bDraft.paidGpay) > 0 ? 'GPay' : 'Cash'));
             const [paidCashBreakdown, setPaidCashBreakdown] = useState(bDraft.paidCashBreakdown || null);
             const [advancePayment, setAdvancePayment] = useState(bDraft.advancePayment || 0);
             const [billDescription, setBillDescription] = useState(bDraft.billDescription || '');
@@ -855,18 +848,11 @@
             const subTotal = billItems.reduce((acc, item) => acc + ((item.qty || 0) * (item.rate || 0)), 0);
             const discountAmount = subTotal * ((Number(billDiscount) || 0) / 100);
             const totalAfterDiscount = subTotal - discountAmount;
-            
-            const totalIncludedGstAmount = billItems.reduce((acc, item) => {
-                const itemTotal = ((item.qty || 0) * (item.rate || 0));
-                const itemTotalAfterItemDiscount = itemTotal * (1 - ((Number(billDiscount) || 0) / 100));
-                const gstRate = Number(item.gst) || 0;
-                const gstAmount = itemTotalAfterItemDiscount - (itemTotalAfterItemDiscount / (1 + (gstRate / 100)));
-                return acc + gstAmount;
-            }, 0);
-
-            const grandTotalBeforeRound = billType === 'GST' ? totalAfterDiscount + totalIncludedGstAmount : totalAfterDiscount;
-            const grandTotal = Math.round(grandTotalBeforeRound);
-            const roundOffAmount = grandTotal - grandTotalBeforeRound;
+            const gpayGstAmount = paymentMode !== 'Cash' ? (Number(paidGpay) || 0) * 0.05 : 0;
+            const gpayAmountWithGst = (Number(paidGpay) || 0) + gpayGstAmount;
+            const totalBeforeRoundOff = totalAfterDiscount + gpayGstAmount;
+            const grandTotal = Math.round(totalBeforeRoundOff);
+            const roundOffAmount = grandTotal - totalBeforeRoundOff;
             const totalQty = billItems.reduce((acc, item) => acc + Number(item.qty || 0), 0);
             const balanceAmount = grandTotal - (Number(paidGpay) || 0) - (Number(paidCash) || 0) - (Number(advancePayment) || 0);
 
@@ -1075,11 +1061,10 @@
 
             const handleEditBill = (billToEdit) => {
                 isEditingRef.current = true; 
-                setBillInvoice(billToEdit.id); setBillDate(billToEdit.date); setBillType(billToEdit.type || 'Non-GST');
+                setBillInvoice(billToEdit.id); setBillDate(billToEdit.date); setBillType('Standard');
                 setBillCustomerName(billToEdit.customer === 'Walk-in' ? '' : billToEdit.customer);
                 setBillCustomerPhone(billToEdit.phone || ''); setBillCustomerAddress(billToEdit.address || '');
                 setBillName(billToEdit.billToName || '');
-                setBillGSTIN(billToEdit.billGSTIN || '');
                 setRedeem1000(Boolean(billToEdit.redeemed));
                 const phoneKeyFromEdit = normalizePhoneKey(billToEdit.phone);
                 setAvailablePoints((phoneKeyFromEdit && customers[phoneKeyFromEdit] && customers[phoneKeyFromEdit].points) ? customers[phoneKeyFromEdit].points : 0);
@@ -1088,9 +1073,9 @@
                 setBillDescription(billToEdit.description || '');
                 
                 if (billToEdit.items && billToEdit.items.length > 0) { setBillItems(billToEdit.items); } 
-                else { setBillItems([{ id: generateSafeId(), particular: 'Restored Legacy Bill (Items missing)', hsn: '', gst: 0, qty: 1, rate: billToEdit.total }]); }
+                else { setBillItems([{ id: generateSafeId(), particular: 'Restored Legacy Bill (Items missing)', hsn: '', qty: 1, rate: billToEdit.total }]); }
                 
-                setPaidCash(billToEdit.cash || 0); setPaidGpay(billToEdit.gpay || 0); setAdvancePayment(billToEdit.advance || 0);
+                setPaidCash(billToEdit.cash || 0); setPaidGpay(billToEdit.gpay || 0); setPaymentMode(Number(billToEdit.gpay) > 0 && Number(billToEdit.cash) > 0 ? 'Cash + GPay' : Number(billToEdit.gpay) > 0 ? 'GPay' : 'Cash'); setAdvancePayment(billToEdit.advance || 0);
                 
                 setActiveTab('billing');
                 try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch(e) {}
@@ -1103,9 +1088,9 @@
             }, [orderId, toName, toAddress, toPhone, billName, billAddress, billPhone]);
 
             useEffect(() => {
-                const draft = { billDate, billInvoice, billType, billCustomerName, billCustomerPhone, billCustomerAddress, billDelivery, billCourier, billTracking, billDiscount, billPromoCode, billItems, paidGpay, paidCash, paidCashBreakdown, advancePayment, billDescription, billGSTIN, redeem1000 };
+                const draft = { billDate, billInvoice, billType, billCustomerName, billCustomerPhone, billCustomerAddress, billDelivery, billCourier, billTracking, billDiscount, billPromoCode, billItems, paidGpay, paidCash, paymentMode, paidCashBreakdown, advancePayment, billDescription, redeem1000 };
                 localStorage.setItem('billingDraft', JSON.stringify(draft));
-            }, [billDate, billInvoice, billType, billCustomerName, billCustomerPhone, billCustomerAddress, billDelivery, billCourier, billTracking, billDiscount, billPromoCode, billItems, paidGpay, paidCash, paidCashBreakdown, advancePayment, billDescription, billGSTIN, redeem1000]);
+            }, [billDate, billInvoice, billType, billCustomerName, billCustomerPhone, billCustomerAddress, billDelivery, billCourier, billTracking, billDiscount, billPromoCode, billItems, paidGpay, paidCash, paymentMode, paidCashBreakdown, advancePayment, billDescription, redeem1000]);
 
             const handlePhoneChange = (e) => {
                 const val = e.target.value;
@@ -1411,20 +1396,12 @@
             useEffect(() => {
                 let isMounted = true;
 
-                const initScanner = async () => {
-                    if (activeTab !== 'scanner' || scanResult || !isMounted) {
-                        return;
-                    }
-                    await startScanner();
-                };
-
                 if (activeTab === 'scanner' && !scanResult) {
-                    initScanner();
-                    const timeoutId = setTimeout(() => initScanner(), 400);
+                    setScannerStatus('Tap Start Camera to begin scanning.');
+                    setScannerError('');
                     return () => {
                         isMounted = false;
-                        clearTimeout(timeoutId);
-                        scannerStopPromiseRef.current = stopScanner();
+                        void stopScanner();
                     };
                 }
 
@@ -1442,7 +1419,7 @@
                     courier: billCourier, tracking: billTracking, discount: billDiscount, promoCode: billPromoCode,
                     items: billItems, total: grandTotal, cash: Number(paidCash) || 0, gpay: Number(paidGpay) || 0,
                     advance: Number(advancePayment) || 0, balance: balanceAmount, description: billDescription,
-                    billToName: billName || '', billGSTIN: billGSTIN || '', redeemed: redeem1000 || false
+                    billToName: billName || '', redeemed: redeem1000 || false
                 };
 
                 setSavedBills(prevBills => {
@@ -1533,10 +1510,10 @@
                 }
 
                 isEditingRef.current = false;
-                setBillCustomerName(''); setBillType('Non-GST'); setBillCustomerPhone(''); setBillCustomerAddress('');
-                setBillTracking(''); setBillDiscount(0); setPaidGpay(0); setPaidCash(0); setAdvancePayment(0); setBillPromoCode('NO CODE');
-                setBillDescription(''); setBillGSTIN(''); setRedeem1000(false); setAvailablePoints(0);
-                setBillItems([{ id: generateSafeId(), particular: '', hsn: '', gst: 0, qty: 1, rate: 0 }]); 
+                setBillCustomerName(''); setBillType('Standard'); setBillCustomerPhone(''); setBillCustomerAddress('');
+                setBillTracking(''); setBillDiscount(0); setPaidGpay(0); setPaidCash(0); setPaymentMode('Cash'); setAdvancePayment(0); setBillPromoCode('NO CODE');
+                setBillDescription(''); setRedeem1000(false); setAvailablePoints(0);
+                setBillItems([{ id: generateSafeId(), particular: '', hsn: '', qty: 1, rate: 0 }]); 
                 
                 const today = new Date().toISOString().split('T')[0];
                 setBillDate(today);
@@ -1590,7 +1567,6 @@ const stringifyIfNeeded = (value) => {
                                 updated.particular = foundItem.name; 
                                 updated.rate = foundItem.price;
                                 if (foundItem.hsn) updated.hsn = foundItem.hsn;
-                                if (foundItem.gst) updated.gst = foundItem.gst;
                             }
                         }
                         return updated;
@@ -1599,7 +1575,7 @@ const stringifyIfNeeded = (value) => {
                 }));
             };
             
-            const addBillItem = () => setBillItems([...billItems, { id: generateSafeId(), particular: '', hsn: '', gst: 0, qty: 1, rate: 0 }]);
+            const addBillItem = () => setBillItems([...billItems, { id: generateSafeId(), particular: '', hsn: '', qty: 1, rate: 0 }]);
             const removeBillItem = (id) => setBillItems(billItems.filter(i => i.id !== id));
             
             const currentMonthStr = todayStr.substring(0, 7); 
@@ -1619,11 +1595,7 @@ const stringifyIfNeeded = (value) => {
                 return false;
             });
 
-            const reportBills = baseReportBills.filter(b => {
-                if (reportFilter === 'GST') return b.type === 'GST';
-                if (reportFilter === 'Non-GST') return b.type !== 'GST';
-                return true;
-            });
+            const reportBills = baseReportBills.filter(() => true);
 
             const reportExpenses = expenses.filter(e => {
                 if (!e.date) return false;
@@ -1639,8 +1611,6 @@ const stringifyIfNeeded = (value) => {
             const totalReportGpay = reportBills.reduce((acc, b) => acc + (b.gpay || 0), 0);
             const totalReportAdvance = reportBills.reduce((acc, b) => acc + (b.advance || 0), 0);
             const totalReportBalance = reportBills.reduce((acc, b) => acc + (b.balance || 0), 0);
-            const totalGSTSales = reportBills.filter(b => b.type === 'GST').reduce((acc, b) => acc + (b.total || 0), 0);
-            const totalNonGSTSales = reportBills.filter(b => b.type !== 'GST').reduce((acc, b) => acc + (b.total || 0), 0);
             
             let periodLabel = '';
             if (reportType === 'daily') { periodLabel = new Date(reportDate).toLocaleDateString('en-GB'); } 
@@ -1680,7 +1650,7 @@ const stringifyIfNeeded = (value) => {
 
                 const headers = ['Date', 'Invoice ID', 'Type', 'Customer Name', 'Phone', 'Total Amount (Rs)', 'Advance Paid (Rs)', 'Cash Paid (Rs)', 'G-Pay Paid (Rs)', 'Pending Balance (Rs)', 'Description'];
                 const rows = reportBills.slice().reverse().map(bill => [
-                    bill.date.split('-').reverse().join('-'), bill.id, bill.type || 'Non-GST',
+                    bill.date.split('-').reverse().join('-'), bill.id, bill.type || 'Standard',
                     `"${(bill.customer || '').replace(/"/g, '""')}"`, `"${(bill.phone || '').replace(/"/g, '""')}"`, bill.total || 0, bill.advance || 0,
                     bill.cash || 0, bill.gpay || 0, bill.balance || 0, `"${(bill.description || '').replace(/"/g, '""')}"`
                 ]);
@@ -1725,65 +1695,50 @@ const stringifyIfNeeded = (value) => {
                     <div className="border border-gray-700 w-full h-full flex flex-col relative p-4 bg-white box-border text-[11px] text-gray-800">
                         {copyLabel && (<div className="absolute top-0 right-0 bg-gray-900 text-white text-[9px] px-2 py-0.5 font-bold uppercase">{copyLabel}</div>)}
                         
-                        <div className="flex flex-col md:flex-row justify-between border-b border-gray-400 pb-2 mb-2 mt-1 shrink-0 gap-4">
-                            <div className="flex items-start gap-3">
-                                <div className="w-20 h-20 rounded-xl border border-gray-300 bg-slate-50 overflow-hidden flex items-center justify-center shrink-0">
-                                    {logoUrl ? <img src={logoUrl} alt="Company Logo" className="max-w-full max-h-full object-contain" /> : <StoreLogo className="w-12 h-12 text-gray-900" />}
+                        <div className="flex items-start justify-between border-b border-gray-300 pb-2 mb-2 shrink-0 gap-4">
+                            <div className="flex items-start gap-3 min-w-0">
+                                <div className="w-16 h-16 rounded-md border border-gray-300 bg-slate-50 overflow-hidden flex items-center justify-center shrink-0">
+                                    {logoUrl ? <img src={logoUrl} alt="Company Logo" className="max-w-full max-h-full object-contain" /> : <StoreLogo className="w-10 h-10 text-gray-900" />}
                                 </div>
-                                <div>
-                                    <h1 className="text-[1.3rem] font-extrabold tracking-[0.18em] text-gray-900 leading-none mb-1 font-serif">SHARIFF ENTERPRISES</h1>
-                                    <p className="text-[10px] text-gray-800 leading-tight">GROUND FLOOR 362/1A N/A AARIF</p>
-                                    <p className="text-[10px] text-gray-800 leading-tight">NAGAR Tirupathur</p>
-                                    <p className="text-[10px] text-gray-800 leading-tight">Tirupathur, Tamil Nadu-635601</p>
-                                    <p className="text-[10px] text-gray-800 leading-tight">India</p>
-                                    <p className="text-[10px] text-gray-800 leading-tight">Contact No. : 6380818578</p>
-                                    <p className="font-bold text-[10px] text-gray-900 mt-1">GSTIN : 33NEYPS4388G1ZC</p>
-                                    <p className="text-[10px] text-gray-700">State: 33-Tamil Nadu</p>
+                                <div className="min-w-0">
+                                    <h1 className="text-[1.1rem] font-black tracking-[0.12em] text-gray-900 leading-none mb-1 uppercase">LOOKSTYLO</h1>
+                                    <p className="text-[9px] text-gray-700 leading-[1.3]">No 18, Sacred Heart College Shopping Complex</p>
+                                    <p className="text-[9px] text-gray-700 leading-[1.3]">Opposite Poorvika Vinayagam Main Road</p>
+                                    <p className="text-[9px] text-gray-700 leading-[1.3]">Tirupathur Dist - 635601</p>
+                                    <p className="text-[9px] text-gray-700 leading-[1.3]">Tirupathur Branch: 8680857511</p>
+                                    <p className="text-[9px] text-gray-700 leading-[1.3]">Instagram: @lookstylo_menswear</p>
                                 </div>
                             </div>
-                            <div className="text-right min-w-[160px]">
-                                <p className="uppercase tracking-[0.3em] text-[9px] font-bold text-gray-600">Tax Invoice</p>
-                                <p className="text-[1rem] font-black text-gray-900 mt-1">{billType === 'GST' ? 'GST Invoice' : 'Tax Invoice'}</p>
-                                <p className="text-[10px] text-gray-700 mt-1">Original</p>
+                            <div className="text-right min-w-[170px] pt-3">
+                                <p className="uppercase tracking-[0.25em] text-[8px] font-bold text-gray-600">Invoice</p>
+                                <p className="text-[0.95rem] font-black text-gray-900 mt-1">{billInvoice}</p>
+                                <p className="text-[9px] text-gray-700 mt-1">Date: {billDate ? billDate.split('-').reverse().join('-') : ''}</p>
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_0.45fr] gap-4 mb-2 pb-2 border-b border-gray-300 shrink-0">
-                            <div>
-                                <p className="text-[9px] uppercase tracking-[0.25em] text-gray-600 font-bold mb-1">Customer / Consignee</p>
-                                <div className="text-[10px] leading-5 text-gray-800">
-                                    <p className="font-semibold uppercase text-[11px] text-gray-900">{billCustomerName || 'Walk-in Customer'}</p>
-                                    {billCustomerAddress ? (
-                                        billCustomerAddress.split('\n').map((line, i) => (
-                                            <p key={i} className="whitespace-pre-wrap mt-0.5">{line}</p>
-                                        ))
-                                    ) : (
-                                        <p className="whitespace-pre-wrap mt-0.5 text-gray-500">Address not provided</p>
-                                    )}
-                                    <p className="mt-0.5">Phone number: {billCustomerPhone || 'Not provided'}</p>
-                                </div>
+                        <div className="grid grid-cols-[1.2fr_0.8fr] gap-4 mb-2 pt-1 pb-2 border-b border-gray-300 shrink-0">
+                            <div className="text-[9px] leading-[1.5] text-gray-800">
+                                <div className="font-bold uppercase text-gray-900 mb-1">Name: <span className="font-normal">{billCustomerName || 'Walk-in Customer'}</span></div>
+                                <div className="font-bold uppercase text-gray-900 mb-1">Phone: <span className="font-normal">{billCustomerPhone || 'Not provided'}</span></div>
+                                <div className="font-bold uppercase text-gray-900 mb-1">Del: <span className="font-normal">{billDelivery || 'Store Walk-in'}</span></div>
+                                {billCustomerAddress && (
+                                    <div className="font-bold uppercase text-gray-900">Address: <span className="font-normal whitespace-pre-wrap">{billCustomerAddress}</span></div>
+                                )}
                             </div>
-                            <div className="text-right">
-                                <p className="text-[9px] uppercase tracking-[0.25em] text-gray-600 font-bold mb-1">Invoice Details</p>
-                                <p className="text-[10px] text-gray-800">Invoice No: <span className="font-semibold">{billInvoice}</span></p>
-                                <p className="text-[10px] text-gray-800">Date: <span className="font-semibold">{billDate ? billDate.split('-').reverse().join('-') : ''}</span></p>
-                                <p className="text-[10px] text-gray-800">Type: <span className="font-semibold">{billType === 'GST' ? 'GST Invoice' : 'Non-GST Invoice'}</span></p>
+                            <div className="text-right text-[9px] text-gray-800">
+                                <div className="font-bold text-gray-900 uppercase pb-1">Invoice No: <span className="font-normal">{billInvoice}</span></div>
+                                <div className="font-bold text-gray-900 uppercase pb-1">Date: <span className="font-normal">{billDate ? billDate.split('-').reverse().join('-') : ''}</span></div>
                             </div>
                         </div>
 
-                        <div className="flex-grow border-t border-gray-400 flex flex-col mt-1">
+                        <div className="flex-grow border border-gray-300 flex flex-col mt-1 relative overflow-hidden">
                             <table className="w-full text-left border-collapse">
                                 <thead>
-                                    <tr className="border-b border-gray-400 bg-gray-50">
+                                    <tr className="bg-gray-100 border-b border-gray-300">
                                         <th className="py-2 px-1 font-bold w-10 text-center border-r border-gray-300">S.No</th>
                                         <th className="py-2 px-2 font-bold border-r border-gray-300">Particulars</th>
-                                        {billType === 'GST' && (
-                                            <>
-                                                <th className="py-2 px-1 font-bold text-center w-16 border-r border-gray-300">HSN / SAC</th>
-                                                <th className="py-2 px-1 font-bold text-center w-12 border-r border-gray-300">Tax</th>
-                                            </>
-                                        )}
-                                        <th className="py-2 px-1 font-bold text-center w-10 border-r border-gray-300">Qty</th>
+                                        <th className="py-2 px-1 font-bold text-center w-16 border-r border-gray-300">HSN / SAC</th>
+                                        <th className="py-2 px-1 font-bold text-center w-12 border-r border-gray-300">Qty</th>
                                         <th className="py-2 px-1 font-bold text-right w-16 border-r border-gray-300">Rate</th>
                                         <th className="py-2 px-2 font-bold text-right w-20">Amount</th>
                                     </tr>
@@ -1795,12 +1750,7 @@ const stringifyIfNeeded = (value) => {
                                             <tr key={item.id} className="border-b border-gray-200">
                                                 <td className="py-2 px-1 text-center border-r border-gray-300">{index + 1}</td>
                                                 <td className="py-2 px-2 border-r border-gray-300 uppercase">{item.particular}</td>
-                                                {billType === 'GST' && (
-                                                    <>
-                                                        <td className="py-2 px-1 text-center border-r border-gray-300">{item.hsn || '-'}</td>
-                                                        <td className="py-2 px-1 text-center border-r border-gray-300">{!item.gst || item.gst == 0 ? 'Non-GST' : `${item.gst}%`}</td>
-                                                    </>
-                                                )}
+                                                <td className="py-2 px-1 text-center border-r border-gray-300">{item.hsn || '-'}</td>
                                                 <td className="py-2 px-1 text-center border-r border-gray-300">{item.qty}</td>
                                                 <td className="py-2 px-1 text-right border-r border-gray-300">{item.rate ? parseFloat(item.rate).toFixed(2) : ''}</td>
                                                 <td className="py-2 px-2 text-right">{itemTotal ? itemTotal.toFixed(2) : ''}</td>
@@ -1809,13 +1759,13 @@ const stringifyIfNeeded = (value) => {
                                     })}
                                 </tbody>
                             </table>
-                            <div className="text-[9px] text-gray-500 italic py-1 px-1 border-b border-gray-400 bg-gray-50 text-right mt-auto">
-                                * GST not included. GST extra as applicable.
+                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                <span className="text-[38px] font-black text-emerald-700/20 tracking-[0.35em] rotate-[-18deg]">PAID</span>
                             </div>
                         </div>
 
-                        <div className="pt-2 flex justify-between mt-2 shrink-0 gap-4">
-                            <div className="w-[58%] text-[10px] text-gray-600">
+                        <div className="pt-2 flex justify-between mt-2 shrink-0 gap-4 relative">
+                            <div className="w-[58%] text-[9px] text-gray-600">
                                 {billDescription && (
                                     <div className="mb-2 bg-gray-50 p-1.5 rounded border border-gray-200">
                                         <p className="font-bold text-gray-800 mb-0.5">Description / Notes:</p>
@@ -1825,12 +1775,12 @@ const stringifyIfNeeded = (value) => {
                                 <p className="font-bold text-gray-800 mb-1">Terms & Conditions:</p>
                                 <ul className="list-disc pl-3 space-y-0.5">{terms.map((t, i) => <li key={i}>{t}</li>)}</ul>
                             </div>
-                            <div className="w-[42%] border border-gray-300 rounded p-2">
+                            <div className="w-[42%] border border-gray-300 rounded p-2 bg-gray-50">
                                 <div className="flex justify-between py-1"><span className="font-semibold">Sub Total:</span><span>₹ {subTotal.toFixed(2)}</span></div>
                                 {billDiscount > 0 && <div className="flex justify-between py-1 text-gray-700"><span>Discount ({billDiscount}%):</span><span>- ₹ {discountAmount.toFixed(2)}</span></div>}
-                                {billType === 'GST' && totalIncludedGstAmount > 0 && <div className="flex justify-between py-1 text-gray-700"><span>GST Extra:</span><span>₹ {totalIncludedGstAmount.toFixed(2)}</span></div>}
+                                {gpayGstAmount > 0 && <div className="flex justify-between py-1 text-gray-700"><span>GST (5% - GPay):</span><span>₹ {gpayGstAmount.toFixed(2)}</span></div>}
                                 {roundOffAmount !== 0 && <div className="flex justify-between py-1 text-gray-700"><span>Round Off:</span><span>{roundOffAmount > 0 ? '+ ' : '- '}₹ {Math.abs(roundOffAmount).toFixed(2)}</span></div>}
-                                <div className="flex justify-between text-sm font-bold border-t border-gray-400 py-2 mt-1 px-1"><span>Grand Total:</span><span>₹ {grandTotal.toFixed(2)}</span></div>
+                                <div className="flex justify-between text-sm font-bold border-t border-gray-400 py-2 mt-1 px-1"><span>{paymentMode !== 'Cash' ? 'Grand Total (Including GST):' : 'Grand Total:'}</span><span>₹ {grandTotal.toFixed(2)}</span></div>
                                 {advancePayment > 0 && <div className="flex justify-between text-[11px] font-semibold text-gray-800 px-1 py-0.5"><span>Advance Paid:</span><span>₹ {(Number(advancePayment) || 0).toFixed(2)}</span></div>}
                                 <div className="flex justify-between text-[11px] font-semibold text-gray-800 px-1 py-0.5"><span>Paid (GPay):</span><span>₹ {(Number(paidGpay) || 0).toFixed(2)}</span></div>
                                 <div className="flex justify-between text-[11px] font-semibold text-gray-800 px-1 py-0.5"><span>Paid (Cash):</span><span>₹ {(Number(paidCash) || 0).toFixed(2)}</span></div>
@@ -1841,7 +1791,7 @@ const stringifyIfNeeded = (value) => {
                         </div>
                         
                         <div className="mt-3 pt-2 border-t border-gray-300 text-center text-[8px] font-extrabold text-gray-500 tracking-widest uppercase shrink-0">
-                            Thank you for your business
+                            Thank you for your shopping. Visit again
                         </div>
 
                         {/* -------------------- TAB: CALCULATOR -------------------- */}
@@ -1999,9 +1949,9 @@ const stringifyIfNeeded = (value) => {
             return (
                 <div className="min-h-screen flex flex-col relative animate-fade-in bg-[#f8fafc] font-sans">
                     {activeTab === 'reports' ? (
-                        <style>{`@media print { @page { size: A4 portrait; margin: 15mm; } }`}</style>
+                        <style>{`@media print { @page { size: A5 portrait; margin: 0; } }`}</style>
                     ) : (
-                        <style>{`@media print { @page { size: A4 portrait; margin: 15mm; } }`}</style>
+                        <style>{`@media print { @page { size: A5 portrait; margin: 0; } }`}</style>
                     )}
 
                     {notification && (
@@ -2282,34 +2232,8 @@ const stringifyIfNeeded = (value) => {
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                                         <ModernInput label="Invoice No." type="text" value={billInvoice} onChange={e=>setBillInvoice(e.target.value)} />
                                         <ModernInput label="Date" type="date" value={billDate} onChange={e=>setBillDate(e.target.value)} />
-                                        <div className="md:col-span-1">
-                                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 ml-1">Invoice Mode</label>
-                                            <div className="grid grid-cols-2 gap-2">
-                                                <button type="button" onClick={() => setBillType('Non-GST')} className={`py-3 rounded-2xl text-sm font-bold transition ${billType === 'Non-GST' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
-                                                    Normal Bill
-                                                </button>
-                                                <button type="button" onClick={() => setBillType('GST')} className={`py-3 rounded-2xl text-sm font-bold transition ${billType === 'GST' ? 'bg-indigo-700 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
-                                                    B2B GST
-                                                </button>
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 ml-1">Bill Type</label>
-                                            <select value={billType} onChange={e=>setBillType(e.target.value)} className="w-full p-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all text-sm font-bold text-slate-800 shadow-sm cursor-pointer">
-                                                <option value="Non-GST">Non-GST Invoice</option>
-                                                <option value="GST">GST Invoice</option>
-                                            </select>
-                                        </div>
                                         <ModernInput label="Phone Number" type="text" value={billCustomerPhone} onChange={handlePhoneChange} placeholder="Enter Phone to Auto-Fill" className="md:col-span-1 border-slate-200 focus:border-indigo-500 font-mono" />
-                                        <ModernInput label="Customer / Consignee Name" type="text" value={billCustomerName} onChange={e=>setBillCustomerName(e.target.value)} placeholder="Walk-in Customer" className="md:col-span-1" />
-                                        <ModernInput label="Bill To / Company Name" type="text" value={billName} onChange={e=>setBillName(e.target.value)} placeholder="(Optional) Company or Firm Name" className="md:col-span-1" />
-                                        {billType === 'GST' && (
-                                            <ModernInput label="Billing GSTIN" type="text" value={billGSTIN} onChange={e=>setBillGSTIN(e.target.value)} placeholder="Enter GSTIN (B2B)" className="md:col-span-1" />
-                                        )}
-                                        <div className="md:col-span-3">
-                                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 ml-1">Customer / Consignee Address</label>
-                                            <textarea rows="3" value={billCustomerAddress} onChange={e=>setBillCustomerAddress(e.target.value)} placeholder="Enter full address for this customer" className="w-full p-4 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all text-sm font-medium shadow-sm resize-none"></textarea>
-                                        </div>
+                                        <ModernInput label="Customer Name" type="text" value={billCustomerName} onChange={e=>setBillCustomerName(e.target.value)} placeholder="Walk-in Customer" className="md:col-span-2" />
                                         
                                         <div className="md:col-span-3 flex items-center gap-4 mt-2">
                                             <div className="text-sm text-slate-700 font-bold">Loyalty Points: <span className="text-indigo-700">{availablePoints}</span></div>
@@ -2360,20 +2284,7 @@ const stringifyIfNeeded = (value) => {
                                                 <div key={item.id} className="flex gap-2 items-center group flex-wrap md:flex-nowrap">
                                                     <div className="w-6 text-center text-xs font-bold text-slate-400">{index + 1}.</div>
                                                     <input list="preset-items" type="text" placeholder="Item Name or Barcode/SKU" value={item.particular} onChange={e=>updateBillItem(item.id, 'particular', e.target.value)} className="flex-grow p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm uppercase outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all w-full md:w-auto font-medium" />
-                                                    
-                                                    {billType === 'GST' && (
-                                                        <>
-                                                            <input type="text" placeholder="HSN" value={item.hsn || ''} onChange={e=>updateBillItem(item.id, 'hsn', e.target.value)} className="w-20 p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20 transition-all text-center font-semibold text-slate-700" />
-                                                            <select value={item.gst || 0} onChange={e=>updateBillItem(item.id, 'gst', e.target.value)} className="w-28 p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20 text-center font-bold text-slate-700 cursor-pointer">
-                                                                <option value="0">Non-GST</option>
-                                                                <option value="5">5% GST</option>
-                                                                <option value="12">12% GST</option>
-                                                                <option value="18">18% GST</option>
-                                                                <option value="28">28% GST</option>
-                                                            </select>
-                                                        </>
-                                                    )}
-
+                                                    <input type="text" placeholder="HSN" value={item.hsn || ''} onChange={e=>updateBillItem(item.id, 'hsn', e.target.value)} className="w-20 p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20 transition-all text-center font-semibold text-slate-700" />
                                                     <input type="number" min="1" value={item.qty} placeholder="Qty" onWheel={(e) => e.target.blur()} onChange={e=>updateBillItem(item.id, 'qty', e.target.value)} className="w-16 p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20 transition-all text-center font-semibold text-slate-700" />
                                                     <input type="number" min="0" value={item.rate} placeholder="Rate ₹" onWheel={(e) => e.target.blur()} onChange={e=>updateBillItem(item.id, 'rate', e.target.value)} className="w-24 p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20 transition-all text-right font-semibold text-slate-700" />
                                                     <button onClick={()=>removeBillItem(item.id)} className={`text-slate-400 hover:text-red-500 hover:bg-red-50 p-2.5 rounded-xl transition-all border border-transparent hover:border-red-100 ${billItems.length === 1 ? 'invisible' : ''}`} title="Remove Row">
@@ -2398,9 +2309,23 @@ const stringifyIfNeeded = (value) => {
                                         <ModernInput label="Discount (%)" type="number" min="0" max="100" value={billDiscount} onChange={e=>setBillDiscount(e.target.value)} />
                                         <ModernInput label="Advance (₹)" type="number" min="0" value={advancePayment} onChange={e=>setAdvancePayment(e.target.value)} className="text-purple-700" />
                                         
-                                        <ModernInput label="Paid GPay (₹)" type="number" min="0" value={paidGpay} onChange={e=>setPaidGpay(e.target.value)} className="text-blue-700 font-bold" />
-                                        
-                                        <ModernInput label="Paid Cash (₹)" type="number" min="0" value={paidCash} onChange={e=>setPaidCash(e.target.value)} className="text-emerald-700" />
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 ml-1">Payment Mode</label>
+                                            <select value={paymentMode} onChange={e=>{ const mode = e.target.value; setPaymentMode(mode); if (mode === 'GPay') setPaidCash(0); else if (mode === 'Cash') setPaidGpay(0); }} className="w-full p-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all text-sm font-bold shadow-sm cursor-pointer">
+                                                <option value="Cash">Cash</option>
+                                                <option value="GPay">GPay (+5% GST)</option>
+                                                <option value="Cash + GPay">Cash + GPay (GST on GPay only)</option>
+                                            </select>
+                                        </div>
+                                        {(paymentMode === 'Cash' || paymentMode === 'Cash + GPay') && (
+                                            <ModernInput label="Paid Cash (₹)" type="number" min="0" value={paidCash} onChange={e=>setPaidCash(e.target.value)} className="text-emerald-700" />
+                                        )}
+                                        {(paymentMode === 'GPay' || paymentMode === 'Cash + GPay') && (
+                                            <div>
+                                                <ModernInput label="Paid GPay (₹)" type="number" min="0" value={paidGpay} onChange={e=>setPaidGpay(e.target.value)} className="text-blue-700 font-bold" />
+                                                <div className="mt-1 ml-1 text-[11px] font-bold text-blue-700">GPay Total incl. GST: ₹{gpayAmountWithGst.toFixed(2)}</div>
+                                            </div>
+                                        )}
                                         <div>
                                             <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 ml-1">Next Promo</label>
                                             <select value={billPromoCode} onChange={e=>setBillPromoCode(e.target.value)} className="w-full p-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all text-sm font-bold text-indigo-600 shadow-sm cursor-pointer">
@@ -2434,7 +2359,8 @@ const stringifyIfNeeded = (value) => {
                                     <div className="flex justify-between items-center p-6 bg-slate-900 rounded-2xl shadow-md">
                                         <div className="flex flex-col">
                                             <span className="text-slate-400 font-bold uppercase text-xs tracking-widest">Balance Remaining</span>
-                                            <span className="text-sm font-medium text-slate-300 mt-1">Total: ₹{grandTotal.toFixed(2)}</span>
+                                            <span className="text-sm font-medium text-slate-300 mt-1">{paymentMode !== 'Cash' ? 'Total (Including GST)' : 'Total'}: ₹{grandTotal.toFixed(2)}</span>
+                                            {paymentMode !== 'Cash' && <span className="text-xs font-bold text-blue-300 mt-1">GST 5% on GPay: ₹{gpayGstAmount.toFixed(2)}</span>}
                                         </div>
                                         <span className={`text-4xl font-black tracking-tight ${balanceAmount > 0 ? "text-red-400" : balanceAmount < 0 ? "text-amber-400" : "text-emerald-400"}`}>
                                             ₹ {balanceAmount.toFixed(2)}
@@ -2479,7 +2405,7 @@ const stringifyIfNeeded = (value) => {
 
                                         {billDelivery === 'Courier' && (
                                         <div className="a5-container relative print:scale-100 transform origin-top scale-[0.85] md:scale-95 transition-all hover:shadow-lg print:flex mt-4">
-                                            <LabelContent copyLabel="Shipping Label" orderId={billTracking || billInvoice} toName={billCustomerName} toAddress={billCustomerAddress} toPhone={billCustomerPhone} billName={billName} billAddress={billCustomerAddress} billPhone={billCustomerPhone} billGSTIN={billGSTIN} logoUrl={logoUrl} loyaltyPoints={(billCustomerPhone && customers[normalizePhoneKey(billCustomerPhone)] && customers[normalizePhoneKey(billCustomerPhone)].points) ? customers[normalizePhoneKey(billCustomerPhone)].points : availablePoints} />
+                                            <LabelContent copyLabel="Shipping Label" orderId={billTracking || billInvoice} toName={billCustomerName} toAddress={billCustomerAddress} toPhone={billCustomerPhone} billName={billName} billAddress={billCustomerAddress} billPhone={billCustomerPhone} logoUrl={logoUrl} loyaltyPoints={(billCustomerPhone && customers[normalizePhoneKey(billCustomerPhone)] && customers[normalizePhoneKey(billCustomerPhone)].points) ? customers[normalizePhoneKey(billCustomerPhone)].points : availablePoints} />
                                         </div>
                                     )}
                                 </div>
@@ -2549,16 +2475,6 @@ const stringifyIfNeeded = (value) => {
                                                     <div>
                                                         <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 ml-1">HSN Code</label>
                                                         <input type="text" value={invFormData.hsn} onChange={e=>setInvFormData({...invFormData, hsn: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none text-sm font-semibold text-slate-800" />
-                                                    </div>
-                                                    <div>
-                                                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 ml-1">GST %</label>
-                                                        <select value={invFormData.gst} onChange={e=>setInvFormData({...invFormData, gst: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none text-sm font-semibold text-slate-800 cursor-pointer">
-                                                            <option value="0">0% (Non-GST)</option>
-                                                            <option value="5">5%</option>
-                                                            <option value="12">12%</option>
-                                                            <option value="18">18%</option>
-                                                            <option value="28">28%</option>
-                                                        </select>
                                                     </div>
                                                 </div>
                                             </div>
@@ -2774,13 +2690,6 @@ const stringifyIfNeeded = (value) => {
                                                     })}
                                                 </select>
                                             )}
-                                            
-                                            <div className="h-6 w-px bg-slate-300 mx-1"></div>
-                                            <select value={reportFilter} onChange={e=>setReportFilter(e.target.value)} className="p-2.5 bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500/20 font-bold text-slate-800 cursor-pointer text-sm min-w-[120px]">
-                                                <option value="All">All Invoices</option>
-                                                <option value="GST">GST Only</option>
-                                                <option value="Non-GST">Non-GST Only</option>
-                                            </select>
                                         </div>
                                         <div className="flex gap-2 w-full xl:w-auto">
                                             <button onClick={exportCustomerData} className="flex-1 xl:flex-none bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-700 font-bold py-2.5 px-4 rounded-xl transition-colors flex items-center justify-center gap-2 text-sm shadow-sm">
@@ -2843,7 +2752,7 @@ const stringifyIfNeeded = (value) => {
                                                             <td className="p-4 text-sm font-medium text-slate-500 print:text-slate-800">{bill.date.split('-').reverse().join('-')}</td>
                                                             <td className="p-4 font-mono text-sm font-bold text-slate-900">{bill.id}</td>
                                                             <td className="p-4 text-center">
-                                                                <span className={`text-[10px] font-bold px-2.5 py-1 rounded-md print:border print:border-slate-300 print:bg-transparent ${bill.type === 'GST' ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600'}`}>{bill.type || 'Non-GST'}</span>
+                                                                <span className="text-[10px] font-bold px-2.5 py-1 rounded-md print:border print:border-slate-300 print:bg-transparent bg-slate-100 text-slate-600">Standard</span>
                                                             </td>
                                                             <td className="p-4 text-sm font-bold text-slate-700 uppercase">{bill.customer}</td>
                                                             <td className="p-4 text-sm font-black text-right text-slate-900">₹ {bill.total}</td>
@@ -2913,7 +2822,7 @@ const stringifyIfNeeded = (value) => {
                                 </div>
                                 <div className="w-full lg:w-[60%] flex justify-center bg-slate-50 p-6 md:p-8 rounded-3xl border border-slate-200 print-section print:overflow-visible print:h-auto print:block print:p-0 print:bg-white print:border-none">
                                     <div className="a5-container hover:shadow-xl transition-shadow">
-                                        <LabelContent orderId={orderId} toName={toName} toAddress={toAddress} toPhone={toPhone} billName={billName} billAddress={billAddress} billPhone={billPhone} billGSTIN={billGSTIN} logoUrl={logoUrl} />
+                                        <LabelContent orderId={orderId} toName={toName} toAddress={toAddress} toPhone={toPhone} billName={billName} billAddress={billAddress} billPhone={billPhone} logoUrl={logoUrl} />
                                     </div>
                                 </div>
                             </>
@@ -3109,12 +3018,12 @@ const stringifyIfNeeded = (value) => {
                                             )}
 
                                             <div className="mt-4 flex gap-2">
-                                                <button type="button" onClick={() => { setScannerError(''); setScannerStatus('Retrying camera...'); void startScanner(); }} className="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50">
-                                                    Retry Camera
+                                                <button type="button" onClick={() => { setScannerError(''); setScannerStatus('Starting camera...'); void startScanner(); }} className="flex-1 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 text-sm font-bold transition-colors">
+                                                    Start Camera
                                                 </button>
                                                 {isMobileView && (
-                                                    <button type="button" onClick={() => { setScannerError(''); enterFullscreenAndStart(); }} className="flex-1 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 text-sm font-bold transition-colors">
-                                                        Start Fullscreen Scan
+                                                    <button type="button" onClick={() => { setScannerError(''); enterFullscreenAndStart(); }} className="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition-colors hover:bg-slate-50">
+                                                        Fullscreen Scan
                                                     </button>
                                                 )}
                                             </div>
