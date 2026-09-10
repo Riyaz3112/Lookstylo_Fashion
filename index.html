@@ -21,6 +21,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="https://unpkg.com/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
     <script src="./node_modules/html5-qrcode/minified/html5-qrcode.min.js"></script>
 
     <script>
@@ -275,7 +277,7 @@
                             <div className="mt-0.5">No 18, Sacred Heart College Shopping Complex</div>
                             <div className="mt-0.5">Opposite Poorvika Vinayagam Main Road</div>
                             <div>Tirupathur Dist - 635601</div>
-                            <div className="mt-0.5">Tirupathur Branch: 8680857511</div>
+                            <div className="mt-0.5">Phone: 8680857511</div>
                         </div>
                         <h3 className="font-extrabold text-[15px] uppercase mb-1">TO,</h3>
                         <div className="font-bold text-[12px] leading-tight uppercase">
@@ -330,13 +332,13 @@
             const [newAuthId, setNewAuthId] = useState(appAuth.id);
             const [newAuthPass, setNewAuthPass] = useState(appAuth.pass);
             const [newBillingCode, setNewBillingCode] = useState(localStorage.getItem('lookstylo_billing_code') || 'billing');
+            const storedBillingCode = (localStorage.getItem('lookstylo_billing_code') || 'billing').trim();
 
             const handleLogin = (e) => {
                 e.preventDefault();
                 const isAdminLogin = loginMode === 'admin';
-                const storedBillingCode = (localStorage.getItem('lookstylo_billing_code') || 'billing').trim().toLowerCase();
                 const isValidAdmin = loginId === appAuth.id && loginPass === appAuth.pass;
-                const isValidBilling = loginMode === 'billing' && billingCode.trim().toLowerCase() === storedBillingCode;
+                const isValidBilling = loginMode === 'billing' && billingCode.trim().toLowerCase() === storedBillingCode.toLowerCase();
 
                 if ((isAdminLogin && isValidAdmin) || (!isAdminLogin && isValidBilling)) {
                     setIsAppLocked(false);
@@ -976,7 +978,7 @@
                 showNotification("Tracking Saved & WhatsApp Sent!");
             };
 
-            const shareBillWhatsApp = () => {
+            const shareBillWhatsApp = async () => {
                 const phone = formatPhoneForWa(billCustomerPhone);
                 if (!phone) return showNotification("Please enter customer phone number.");
                 const totalPaidAndAdvance = Number(paidCash) + Number(paidGpay) + Number(advancePayment);
@@ -990,8 +992,135 @@
                 }
                 
                 msg += `📸 Follow us on Instagram for the latest arrivals, exclusive offers & fashion updates:\nhttps://www.instagram.com/lookstylo_menswear?igsh=MWs4amhoazR5YTg5NQ==\n\n💬 Join our WhatsApp Group to get instant updates on new collections, discounts & giveaways:\nhttps://chat.whatsapp.com/IjvWkTNYwv8De8u9p4kfyv\n\n⭐ We'd love to hear about your experience! Please leave us a Google review:\nhttps://share.google/YggYHlZgmJw3xvRmG\n\nThank you for choosing LookStylo Fashion. We look forward to serving you again! 😊`;
-                
-                openWhatsAppMsg(phone, msg);
+
+                const billElement = document.getElementById('bill-preview');
+                if (!billElement || !window.jspdf || !window.jspdf.jsPDF) {
+                    openWhatsAppMsg(phone, msg);
+                    return showNotification('WhatsApp opened. PDF generator is unavailable.');
+                }
+
+                try {
+                    showNotification('Preparing e-Bill PDF...');
+                    const JsPDF = window.jspdf && window.jspdf.jsPDF;
+                    if (!JsPDF) throw new Error('PDF generator is unavailable');
+
+                    const pdf = new JsPDF({ unit: 'mm', format: 'a5', orientation: 'portrait' });
+                    const pageWidth = 148;
+                    const margin = 8;
+                    const right = pageWidth - margin;
+                    let y = 12;
+                    const dateText = billDate ? billDate.split('-').reverse().join('-') : '';
+                    const writePair = (label, value, x = margin) => {
+                        pdf.setFont('helvetica', 'bold');
+                        pdf.text(label, x, y);
+                        pdf.setFont('helvetica', 'normal');
+                        const valueLines = pdf.splitTextToSize(String(value || '-'), right - x - 25);
+                        pdf.text(valueLines, x + 25, y);
+                        y += 5 * valueLines.length;
+                    };
+
+                    pdf.setFont('helvetica', 'bold');
+                    pdf.setFontSize(16);
+                    pdf.text('LOOKSTYLO FASHION', margin, y);
+                    pdf.setFontSize(9);
+                    pdf.setFont('helvetica', 'normal');
+                    pdf.text('No 18, Sacred Heart College Shopping Complex', margin, y + 5);
+                    pdf.text('Tirupathur Dist - 635601 | Phone: 8680857511', margin, y + 10);
+                    pdf.setFont('helvetica', 'bold');
+                    pdf.text('INVOICE', right, y, { align: 'right' });
+                    pdf.setFont('helvetica', 'normal');
+                    pdf.text(String(billInvoice), right, y + 5, { align: 'right' });
+                    pdf.text(`Date: ${dateText}`, right, y + 10, { align: 'right' });
+                    y += 18;
+                    pdf.setDrawColor(160, 160, 160);
+                    pdf.line(margin, y, right, y);
+                    y += 7;
+
+                    pdf.setFontSize(9);
+                    writePair('Name:', billCustomerName || 'Walk-in Customer');
+                    writePair('Phone:', billCustomerPhone || 'Not provided');
+                    writePair('Delivery:', billDelivery || 'Store Walk-in');
+                    if (billCustomerAddress) {
+                        writePair('Address:', billCustomerAddress);
+                    }
+                    y += 2;
+
+                    const columns = [margin + 1, 20, 102, 113, 126, right];
+                    const headers = ['S.No', 'Particulars', 'HSN', 'Qty', 'Rate', 'Amount'];
+                    pdf.setFillColor(240, 240, 240);
+                    pdf.rect(margin, y - 4, right - margin, 7, 'F');
+                    pdf.setFont('helvetica', 'bold');
+                    headers.forEach((header, index) => pdf.text(header, columns[index], y, { align: index >= 2 ? 'right' : 'left' }));
+                    y += 7;
+                    pdf.setFont('helvetica', 'normal');
+                    billItems.forEach((item, index) => {
+                        const itemTotal = (Number(item.qty) || 0) * (Number(item.rate) || 0);
+                        const itemName = pdf.splitTextToSize(String(item.particular || '-'), 60)[0];
+                        pdf.text(String(index + 1), columns[0], y);
+                        pdf.text(itemName, columns[1], y);
+                        pdf.text(String(item.hsn || '-'), columns[2], y, { align: 'right' });
+                        pdf.text(String(item.qty || 0), columns[3], y, { align: 'right' });
+                        pdf.text((Number(item.rate) || 0).toFixed(2), columns[4], y, { align: 'right' });
+                        pdf.text(itemTotal.toFixed(2), columns[5], y, { align: 'right' });
+                        pdf.line(margin, y + 2, right, y + 2);
+                        y += 7;
+                    });
+                    y += 5;
+
+                    const totals = [
+                        ['Sub Total:', subTotal.toFixed(2)],
+                        ...(billDiscount > 0 ? [[`Discount (${billDiscount}%):`, `- ${discountAmount.toFixed(2)}`]] : []),
+                        ...(gpayGstAmount > 0 ? [['GST (5% - GPay):', gpayGstAmount.toFixed(2)]] : []),
+                        ['Grand Total:', grandTotal.toFixed(2)],
+                        ['Paid (GPay):', (Number(paidGpay) || 0).toFixed(2)],
+                        ['Paid (Cash):', (Number(paidCash) || 0).toFixed(2)],
+                        ['Balance:', balanceAmount.toFixed(2)]
+                    ];
+                    pdf.setFontSize(10);
+                    totals.forEach(([label, value]) => {
+                        pdf.setFont('helvetica', 'bold');
+                        pdf.text(label, 88, y);
+                        pdf.setFont('helvetica', 'normal');
+                        pdf.text(`Rs. ${value}`, right, y, { align: 'right' });
+                        y += 5;
+                    });
+                    if (billDescription) {
+                        y += 3;
+                        pdf.setFont('helvetica', 'bold');
+                        pdf.text('Notes:', margin, y);
+                        pdf.setFont('helvetica', 'normal');
+                        pdf.text(pdf.splitTextToSize(String(billDescription), 125), margin, y + 5);
+                    }
+                    pdf.setFontSize(8);
+                    pdf.setTextColor(100, 100, 100);
+                    pdf.text('Thank you for your shopping. Visit again', pageWidth / 2, 202, { align: 'center' });
+                    const pdfBlob = pdf.output('blob');
+
+                    const file = new File([pdfBlob], `Lookstylo_${billInvoice}.pdf`, { type: 'application/pdf' });
+                    const canShareFile = typeof navigator.share === 'function'
+                        && (!navigator.canShare || navigator.canShare({ files: [file] }));
+
+                    if (canShareFile) {
+                        await navigator.share({ title: `e-Bill ${billInvoice}`, text: msg, files: [file] });
+                        showNotification('Select WhatsApp to send the e-Bill.');
+                    } else {
+                        const downloadUrl = URL.createObjectURL(pdfBlob);
+                        const link = document.createElement('a');
+                        link.href = downloadUrl;
+                        link.download = file.name;
+                        document.body.appendChild(link);
+                        link.click();
+                        link.remove();
+                        URL.revokeObjectURL(downloadUrl);
+                        openWhatsAppMsg(phone, msg);
+                        showNotification('PDF downloaded. Attach it in WhatsApp.');
+                    }
+                } catch (error) {
+                    if (error && error.name === 'AbortError') return;
+                    console.error('e-Bill sharing failed:', error);
+                    openWhatsAppMsg(phone, msg);
+                    showNotification('PDF sharing failed. WhatsApp message opened.');
+                }
             };
 
             const sendReminderWhatsApp = (bill) => {
@@ -1705,7 +1834,7 @@ const stringifyIfNeeded = (value) => {
                                     <p className="text-[9px] text-gray-700 leading-[1.3]">No 18, Sacred Heart College Shopping Complex</p>
                                     <p className="text-[9px] text-gray-700 leading-[1.3]">Opposite Poorvika Vinayagam Main Road</p>
                                     <p className="text-[9px] text-gray-700 leading-[1.3]">Tirupathur Dist - 635601</p>
-                                    <p className="text-[9px] text-gray-700 leading-[1.3]">Tirupathur Branch: 8680857511</p>
+                                    <p className="text-[9px] text-gray-700 leading-[1.3]">Phone: 8680857511</p>
                                     <p className="text-[9px] text-gray-700 leading-[1.3]">Instagram: @lookstylo_menswear</p>
                                 </div>
                             </div>
@@ -1930,7 +2059,7 @@ const stringifyIfNeeded = (value) => {
                                     <div>
                                         <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2 ml-1">Billing Code</label>
                                         <input type="text" value={billingCode} onChange={e=>setBillingCode(e.target.value)} className="w-full p-4 bg-slate-800/50 border border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all text-white font-medium placeholder-slate-500 shadow-inner" placeholder="Enter Billing Code" />
-                                        <p className="text-[11px] text-slate-500 mt-2 ml-1">Use the code: billing</p>
+                                        <p className="text-[11px] text-slate-500 mt-2 ml-1">Use the code: {storedBillingCode}</p>
                                     </div>
                                 )}
                                 
@@ -2395,7 +2524,7 @@ const stringifyIfNeeded = (value) => {
                                         <span className="inline-block bg-white text-slate-500 border border-slate-200 font-bold text-[10px] uppercase tracking-widest px-4 py-1.5 rounded-full shadow-sm">Print Previews</span>
                                     </div>
                                     
-                                    <div className="a5-container relative print:scale-100 transform origin-top scale-[0.85] md:scale-95 transition-all hover:shadow-lg">
+                                    <div id="bill-preview" className="a5-container relative print:scale-100 transform origin-top scale-[0.85] md:scale-95 transition-all hover:shadow-lg">
                                         {renderBillContent("Original - Buyer's Copy")}
                                     </div>
 
