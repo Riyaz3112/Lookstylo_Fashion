@@ -92,6 +92,18 @@ Simply double-click `index.html` to open in your browser.
 - Set backend server URL
 - Backup/restore database
 
+### Automatic WhatsApp e-Bills
+
+The browser fallback opens the customer's WhatsApp chat and downloads the PDF. For automatic PDF delivery, configure Meta WhatsApp Cloud API and run the secure sender:
+
+```bash
+copy .env.example .env
+npm install
+npm run whatsapp-server
+```
+
+Fill in the Meta values in `.env`, then set **Settings -> Integrations -> WhatsApp Cloud API URL** to `http://localhost:8787/api/whatsapp/send`. Keep the access token only in `.env`; never place it in `index.html`.
+
 ## Data Storage
 
 All data is stored locally in your browser using localStorage:

@@ -20,12 +20,15 @@
   "license": "MIT",
   "scripts": {
     "start": "http-server -p 8000",
-    "serve": "npx http-server -p 8000"
+    "serve": "npx http-server -p 8000",
+    "whatsapp-server": "node whatsapp-server.js"
   },
   "devDependencies": {
     "http-server": "^14.1.1"
   },
   "dependencies": {
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
     "html5-qrcode": "^2.3.8"
   }
 }

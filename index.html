@@ -387,6 +387,7 @@
 
             const [activeTab, setActiveTab] = useState('billing'); 
             const [serverUrl, setServerUrl] = useState(localStorage.getItem('serverUrl') || '/api/save-label');
+            const [whatsappApiUrl, setWhatsappApiUrl] = useState(localStorage.getItem('whatsappApiUrl') || '');
             const [logoUrl, setLogoUrl] = useState(localStorage.getItem('logoUrl') || ''); 
             const [storeName, setStoreName] = useState(localStorage.getItem('storeName') || 'LOOKSTYLO FASHION');
             // Default to WA Business for robust messaging
@@ -488,29 +489,27 @@
                 setTimeout(() => setNotification(null), 3000);
             };
 
-            // Unified WhatsApp Opener specifically enforcing Business App if configured
+            // Open WhatsApp reliably across desktop browsers and mobile apps.
             const openWhatsAppMsg = (phone, msg) => {
                 const encodedMsg = encodeURIComponent(msg);
-                
-                if (waPreference === 'w4b_force' || waPreference === 'w4b_android') {
-                    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-                    
-                    if (isIOS) {
-                        // iOS custom scheme for WhatsApp Business
-                        window.location.href = `whatsapp-smb://send?phone=${phone}&text=${encodedMsg}`;
-                    } else {
-                        // Android Intent for WhatsApp Business
-                        window.location.href = `intent://send?phone=${phone}&text=${encodedMsg}#Intent;package=com.whatsapp.w4b;scheme=whatsapp;end;`;
-                    }
-                    
-                    // Fallback in case they don't have WA Business installed
+                const standardUrl = `https://wa.me/${phone}?text=${encodedMsg}`;
+                const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+                const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+                if (isMobile && (waPreference === 'w4b_force' || waPreference === 'w4b_android')) {
+                    const appUrl = isIOS
+                        ? `whatsapp-smb://send?phone=${phone}&text=${encodedMsg}`
+                        : `intent://send?phone=${phone}&text=${encodedMsg}#Intent;package=com.whatsapp.w4b;scheme=whatsapp;end;`;
+                    window.location.href = appUrl;
                     setTimeout(() => {
-                        window.open(`https://wa.me/${phone}?text=${encodedMsg}`, '_blank');
-                    }, 2500);
-                } else {
-                    // Standard WhatsApp Web/App fallback
-                    window.open(`https://wa.me/${phone}?text=${encodedMsg}`, '_blank');
+                        const fallback = window.open(standardUrl, '_blank', 'noopener,noreferrer');
+                        if (!fallback) window.location.href = standardUrl;
+                    }, 1500);
+                    return;
                 }
+
+                const opened = window.open(standardUrl, '_blank', 'noopener,noreferrer');
+                if (!opened) window.location.href = standardUrl;
             };
 
             const [installPrompt, setInstallPrompt] = useState(null);
@@ -981,6 +980,7 @@
             const shareBillWhatsApp = async () => {
                 const phone = formatPhoneForWa(billCustomerPhone);
                 if (!phone) return showNotification("Please enter customer phone number.");
+                const whatsappApiUrl = (localStorage.getItem('whatsappApiUrl') || '').trim();
                 const totalPaidAndAdvance = Number(paidCash) + Number(paidGpay) + Number(advancePayment);
                 
                 let msg = `🎉 Thank you for shopping with LookStylo Fashion!\n\nWe truly appreciate your support. ❤️\n\n*Your e-Bill Summary:*\nInvoice: ${billInvoice}\nDate: ${billDate.split('-').reverse().join('-')}\nTotal Amount: ₹ ${grandTotal}\nPaid Amount: ₹ ${totalPaidAndAdvance}\nPending Balance: ₹ ${balanceAmount}\n\n`;
@@ -1096,25 +1096,38 @@
                     pdf.text('Thank you for your shopping. Visit again', pageWidth / 2, 202, { align: 'center' });
                     const pdfBlob = pdf.output('blob');
 
-                    const file = new File([pdfBlob], `Lookstylo_${billInvoice}.pdf`, { type: 'application/pdf' });
-                    const canShareFile = typeof navigator.share === 'function'
-                        && (!navigator.canShare || navigator.canShare({ files: [file] }));
-
-                    if (canShareFile) {
-                        await navigator.share({ title: `e-Bill ${billInvoice}`, text: msg, files: [file] });
-                        showNotification('Select WhatsApp to send the e-Bill.');
-                    } else {
-                        const downloadUrl = URL.createObjectURL(pdfBlob);
-                        const link = document.createElement('a');
-                        link.href = downloadUrl;
-                        link.download = file.name;
-                        document.body.appendChild(link);
-                        link.click();
-                        link.remove();
-                        URL.revokeObjectURL(downloadUrl);
-                        openWhatsAppMsg(phone, msg);
-                        showNotification('PDF downloaded. Attach it in WhatsApp.');
+                    const fileName = `Lookstylo_${billInvoice}.pdf`;
+                    if (whatsappApiUrl) {
+                        showNotification('Sending e-Bill through WhatsApp Cloud API...');
+                        const pdfBase64 = await new Promise((resolve, reject) => {
+                            const reader = new FileReader();
+                            reader.onload = () => resolve(reader.result);
+                            reader.onerror = () => reject(new Error('Unable to prepare PDF'));
+                            reader.readAsDataURL(pdfBlob);
+                        });
+                        const apiResponse = await fetch(whatsappApiUrl, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ phone, message: msg, fileName, pdfBase64 })
+                        });
+                        const apiResult = await apiResponse.json().catch(() => ({}));
+                        if (!apiResponse.ok || !apiResult.sent) {
+                            throw new Error(apiResult.error || 'WhatsApp Cloud API rejected the e-Bill');
+                        }
+                        showNotification('e-Bill sent directly to the customer on WhatsApp.');
+                        return;
                     }
+
+                    const downloadUrl = URL.createObjectURL(pdfBlob);
+                    const link = document.createElement('a');
+                    link.href = downloadUrl;
+                    link.download = fileName;
+                    document.body.appendChild(link);
+                    link.click();
+                    link.remove();
+                    URL.revokeObjectURL(downloadUrl);
+                    openWhatsAppMsg(phone, msg);
+                    showNotification('e-Bill downloaded. Customer WhatsApp chat is ready to send.');
                 } catch (error) {
                     if (error && error.name === 'AbortError') return;
                     console.error('e-Bill sharing failed:', error);
@@ -2501,9 +2514,9 @@ const stringifyIfNeeded = (value) => {
                                             <Icons.Print className="w-4 h-4 text-slate-500" />
                                             Print
                                         </button>
-                                        <button onClick={shareBillWhatsApp} className="w-full bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 text-emerald-700 font-bold py-3.5 rounded-xl transition-all flex justify-center items-center gap-2 text-sm">
+                                        <button onClick={shareBillWhatsApp} title="Download the e-Bill and open this customer's WhatsApp chat" aria-label="Send e-Bill on WhatsApp" className="w-full bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 text-emerald-700 font-bold py-3.5 rounded-xl transition-all flex justify-center items-center gap-2 text-sm">
                                             <WhatsAppIcon className="h-4 w-4" />
-                                            WhatsApp
+                                            Send e-Bill
                                         </button>
                                         <button onClick={() => {
                                             if (!billCustomerPhone) return showNotification("Please enter customer phone number to send updates.");
@@ -3355,6 +3368,11 @@ const stringifyIfNeeded = (value) => {
                                         <div>
                                             <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 ml-1">Backend Server URL</label>
                                             <input type="text" value={serverUrl} onChange={e => { setServerUrl(e.target.value); localStorage.setItem('serverUrl', e.target.value); }} placeholder="/api/save-label" className="w-full p-4 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all font-mono text-[11px] text-slate-700 shadow-sm" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 ml-1">WhatsApp Cloud API URL</label>
+                                            <input type="url" value={whatsappApiUrl} onChange={e => { setWhatsappApiUrl(e.target.value); localStorage.setItem('whatsappApiUrl', e.target.value.trim()); }} placeholder="http://localhost:8787/api/whatsapp/send" className="w-full p-4 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all font-mono text-[11px] text-slate-700 shadow-sm" />
+                                            <p className="text-[11px] text-slate-400 mt-2 ml-1">When configured, Send e-Bill sends the PDF automatically through your secure backend.</p>
                                         </div>
                                         <button onClick={() => showNotification('Integrations Saved Successfully!')} className="w-full bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-bold py-3 px-4 rounded-xl transition-colors border border-indigo-200 text-sm">
                                             Test Connections

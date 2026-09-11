@@ -17,3 +17,6 @@ Thumbs.db
 # Backups
 *_backup.html
 *.bak
+.env
+.env.*
+!.env.example
