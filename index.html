@@ -224,9 +224,50 @@
             return <canvas ref={ref}></canvas>;
         };
 
+        const MAX_QR_PAYLOAD_LENGTH = 1800;
+
+        const getSafeQrPayload = (data) => {
+            const text = typeof data === 'string' ? data : JSON.stringify(data);
+            if (!text || text.length <= MAX_QR_PAYLOAD_LENGTH) return text;
+
+            try {
+                const parsed = JSON.parse(text);
+                if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                    return JSON.stringify({
+                        id: String(parsed.id || '').slice(0, 120),
+                        name: String(parsed.name || '').slice(0, 240),
+                        phone: String(parsed.phone || '').slice(0, 40)
+                    });
+                }
+            } catch (e) {
+                // Keep the fallback below for non-JSON payloads.
+            }
+
+            return text.slice(0, MAX_QR_PAYLOAD_LENGTH);
+        };
+
         const QRCodeRender = ({ data, size = 120 }) => {
             const ref = useRef(null);
-            useEffect(() => { if (ref.current && data) { ref.current.innerHTML = ""; new QRCode(ref.current, { text: data, width: size, height: size, colorDark: "#000000", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.M }); } }, [data, size]);
+            useEffect(() => {
+                if (!ref.current || !data || typeof QRCode === 'undefined') return;
+
+                ref.current.innerHTML = "";
+                try {
+                    new QRCode(ref.current, {
+                        text: getSafeQrPayload(data),
+                        width: size,
+                        height: size,
+                        colorDark: "#000000",
+                        colorLight: "#ffffff",
+                        correctLevel: QRCode.CorrectLevel.M
+                    });
+                } catch (error) {
+                    console.warn('QR code generation failed:', error);
+                    ref.current.textContent = 'QR unavailable';
+                    ref.current.style.fontSize = '10px';
+                    ref.current.style.padding = '8px';
+                }
+            }, [data, size]);
             return <div ref={ref} className="border border-gray-200 p-1 bg-white inline-block"></div>;
         };
 
