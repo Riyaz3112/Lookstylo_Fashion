@@ -995,7 +995,7 @@
             // Unified Delivery Action Handler
             const handleDeliveryAction = (order, actionType) => {
                 const phone = formatPhoneForWa(order.phone);
-                if (!phone) {
+                if (!phone && actionType !== 'dispatch_today') {
                     showNotification("Order saved but no valid phone number for WhatsApp.");
                     if (activeTab === 'scanner') setScanResult(null);
                     setDeliveryActionBill(null);
@@ -1004,13 +1004,13 @@
 
                 let msg = '';
                 if (actionType === 'dispatch_today') {
-                    msg = `*LOOKSTYLO FASHION*\n\nDear ${order.customer || order.name || 'Customer'},\nGreat news! 🎉 Your order (${order.id}) is scheduled to be dispatched today.\nPlease scan the tracking ID next to complete dispatch and send the confirmation message.\n\nThank you for shopping with us!`;
                     setAwaitingTrackingFor(order);
                     setScanResult(null);
+                    setScannerStatus('Scan the courier label or enter its tracking ID to send dispatch confirmation.');
                     if (activeTab !== 'scanner') {
                         setActiveTab('scanner');
                     }
-                    showNotification('Ready to scan tracking ID. WhatsApp dispatch notice sent.');
+                    showNotification('Scan or enter the courier tracking ID to finish dispatch.');
                 } else if (actionType === 'dispatch_tomorrow') {
                     msg = `*LOOKSTYLO FASHION*\n\nDear ${order.customer || order.name || 'Customer'},\nSorry for the delay! 🙏 Your order (${order.id}) will be dispatched tomorrow. We appreciate your patience.\n\nThank you for shopping with us!`;
                 } else if (actionType === 'out_for_delivery') {
@@ -1019,7 +1019,7 @@
 
                 if (activeTab === 'scanner') setScanResult(null);
                 setDeliveryActionBill(null);
-                openWhatsAppMsg(phone, msg);
+                if (msg) openWhatsAppMsg(phone, msg);
             };
 
             const handleScannedTracking = (order, trackingId) => {
@@ -1051,6 +1051,7 @@
                     return updated;
                 });
                 setAwaitingTrackingFor(null);
+                setScannerStatus(`Tracking ID saved: ${trackingId}`);
 
                 const phone = formatPhoneForWa(order.phone);
                 if (!phone) { 
@@ -3452,12 +3453,17 @@ const stringifyIfNeeded = (value) => {
                                             <h3 className={`text-center font-bold text-base uppercase tracking-[0.35em] mb-6 ${awaitingTrackingFor ? 'text-amber-300' : 'text-slate-300'}`}>
                                                 {awaitingTrackingFor ? `Scan Tracking For: ${awaitingTrackingFor.id}` : `Scan Order QR Code`}
                                             </h3>
+                                            {awaitingTrackingFor && (
+                                                <p className="mb-4 text-center text-sm text-slate-300">
+                                                    Scan the courier label's QR code or barcode, or enter the tracking ID below. The dispatch confirmation is sent after it is saved.
+                                                </p>
+                                            )}
                                             
                                             <div className={`${isMobileView ? 'flex-1 flex flex-col w-full overflow-hidden rounded-[1.75rem] border border-slate-800 shadow-inner' : 'w-full rounded-3xl overflow-hidden min-h-[280px] shadow-sm bg-white relative border border-slate-200'}`}>
                                                 <div id="reader" className={`${isMobileView ? 'w-full h-full' : 'w-full min-h-[280px]'}`}></div>
                                             </div>
 
-                                            {scannerStatus && <p className="mt-3 text-center text-xs font-semibold text-slate-500">{scannerStatus}</p>}
+                                            {scannerStatus && <p className="mt-3 break-all text-center text-xs font-semibold text-slate-500">{scannerStatus}</p>}
                                             {scannerError && (
                                                 <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-700 text-center">
                                                     {scannerError}
@@ -3480,7 +3486,7 @@ const stringifyIfNeeded = (value) => {
                                                     Or Manual Entry
                                                 </h4>
                                                 <form onSubmit={(e) => { e.preventDefault(); processScan(manualCode); setManualCode(''); }} className="flex gap-2">
-                                                    <input type="text" value={manualCode} onChange={e=>setManualCode(e.target.value)} placeholder="Enter ID..." className="flex-1 p-3 bg-white border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/50 text-sm font-mono shadow-sm" />
+                                                    <input type="text" value={manualCode} onChange={e=>setManualCode(e.target.value)} placeholder={awaitingTrackingFor ? 'Enter tracking ID...' : 'Enter ID...'} className="flex-1 p-3 bg-white border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/50 text-sm font-mono shadow-sm" />
                                                     <button type="submit" className="bg-slate-900 hover:bg-slate-800 text-white font-bold px-5 py-3 rounded-xl transition-colors shadow-sm">Submit</button>
                                                 </form>
                                             </div>
