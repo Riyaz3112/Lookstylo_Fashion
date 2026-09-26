@@ -23,7 +23,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <script src="https://unpkg.com/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
-    <script src="./node_modules/html5-qrcode/minified/html5-qrcode.min.js"></script>
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 
     <script>
         // Workaround for file:// protocol - disable import checks
@@ -295,7 +295,30 @@
             </div>
         );
 
-        const LabelContent = ({ orderId, toName, toAddress, toPhone, billName, billAddress, billPhone, copyLabel, logoUrl, loyaltyPoints }) => (
+        const COURIER_ADDRESS_FIELDS = ['Door No.', 'Street', 'Area', 'City/Town', 'Block/Taluk', 'PIN Code', 'District'];
+        const getCourierAddressValue = (address, field) => {
+            const prefix = `${field}:`;
+            const line = (address || '').split('\n').find(value => value.startsWith(prefix));
+            return line ? line.slice(prefix.length).trim() : '';
+        };
+        const updateCourierAddressValue = (address, field, value) => {
+            const lines = (address || '').split('\n').filter(Boolean);
+            const prefix = `${field}:`;
+            const lineIndex = lines.findIndex(line => line.startsWith(prefix));
+            if (lineIndex >= 0) lines[lineIndex] = `${prefix} ${value}`;
+            else lines.push(`${prefix} ${value}`);
+            return lines.join('\n');
+        };
+        const getCurrentPostalDistrict = (postOffice) => {
+            const state = String(postOffice.State || '').trim().toLowerCase();
+            const district = String(postOffice.District || '').trim().toLowerCase();
+            const block = String(postOffice.Block || '').trim().toLowerCase();
+            const tirupathurBlocks = ['tirupathur', 'tirupattur', 'natrampalli', 'kandhili', 'jolarpet', 'alangayam', 'madhanur', 'vaniyambadi', 'ambur'];
+            if (state === 'tamil nadu' && district === 'vellore' && tirupathurBlocks.includes(block)) return 'Tirupathur';
+            return postOffice.District || '';
+        };
+
+        const LabelContent = ({ orderId, toName, toAddress, toPhone, billName, billAddress, billPhone, copyLabel, logoUrl }) => (
             <div className="border-2 border-gray-900 flex-grow flex flex-col text-black bg-white box-border w-full h-full p-4 relative">
                 {copyLabel && <div className="absolute top-0 right-0 bg-indigo-600 text-white text-[9px] px-2 py-0.5 font-bold uppercase z-10">{copyLabel}</div>}
                 <div className="flex items-center justify-between border-b-2 border-gray-900 pb-4 mb-4">
@@ -322,9 +345,11 @@
                         </div>
                         <h3 className="font-extrabold text-[15px] uppercase mb-1">TO,</h3>
                         <div className="font-bold text-[12px] leading-tight uppercase">
-                            {toName || ' '}<br/>
+                            Name: {toName || ' '}<br/>
+                            Phone: {toPhone || ' '}<br/>
                             {toAddress ? toAddress.split('\n').map((line, i) => <React.Fragment key={i}>{line}<br/></React.Fragment>) : ' '}<br/>
-                            {toPhone ? `📞 ${toPhone}` : ' '}
+                            State: Tamil Nadu<br/>
+                            Country: India
                         </div>
                     </div>
 
@@ -350,7 +375,6 @@
                 </div>
 
                 <div className="mt-auto flex flex-col items-center pt-4 border-t-2 border-gray-900">
-                    <div className="mb-2 text-sm font-bold text-gray-700">Loyalty: <span className="text-indigo-700">{loyaltyPoints || 0} pts</span></div>
                     <div className="mb-4 bg-white p-2 rounded"><Barcode value={orderId || '0000'} /></div>
                     <div className="flex items-center justify-between w-full font-bold text-lg text-brand-red uppercase px-4">
                         <div className="flex items-center gap-1.5"><InstagramIcon className="w-6 h-6" /> LOOKSTLYO_MENSWEAR</div>
@@ -659,6 +683,7 @@
                     return raw;
                 } catch (e) { return {}; }
             });
+            const [customerSearch, setCustomerSearch] = useState('');
 
             const [availablePoints, setAvailablePoints] = useState(0);
             const [redeem1000, setRedeem1000] = useState(false);
@@ -862,8 +887,11 @@
             const [billInvoice, setBillInvoice] = useState(bDraft.billInvoice || getNextInvoiceId(bDraft.billDate || todayStr));
             const [billType, setBillType] = useState(bDraft.billType || 'Standard'); 
             const [billCustomerName, setBillCustomerName] = useState(bDraft.billCustomerName || '');
+            const [billCustomerDob, setBillCustomerDob] = useState(bDraft.billCustomerDob || '');
             const [billCustomerPhone, setBillCustomerPhone] = useState(bDraft.billCustomerPhone || '');
             const [billCustomerAddress, setBillCustomerAddress] = useState(bDraft.billCustomerAddress || '');
+            const [pinLookupStatus, setPinLookupStatus] = useState('');
+            const pinLookupRequestRef = useRef(0);
             const [billDelivery, setBillDelivery] = useState(bDraft.billDelivery || 'Store Walk-in');
             const [billCourier, setBillCourier] = useState(bDraft.billCourier || 'Professional Courier');
             const [billTracking, setBillTracking] = useState(bDraft.billTracking || '');
@@ -925,12 +953,14 @@
                         const points = Number(entry.points || 0);
                         const name = entry.name || '';
                         const address = entry.address || '';
+                        const dob = entry.dob || '';
                         if (!migrated[nk]) {
-                            migrated[nk] = { name, address, points };
+                            migrated[nk] = { name, address, dob, points };
                         } else {
                             migrated[nk].points = Number(migrated[nk].points || 0) + points;
                             if (!migrated[nk].name && name) migrated[nk].name = name;
                             if (!migrated[nk].address && address) migrated[nk].address = address;
+                            if (!migrated[nk].dob && dob) migrated[nk].dob = dob;
                         }
                         if (nk !== k) changed = true;
                     });
@@ -1193,6 +1223,14 @@
                 openWhatsAppMsg(phone, msg);
             };
 
+            const sendBirthdayOfferWhatsApp = (customer) => {
+                const phone = formatPhoneForWa(customer.phone);
+                if (!phone) return showNotification('No valid phone number is saved for this customer.');
+                const message = `*LOOKSTYLO FASHION*\n\nYour birthday is coming up in 2 days, ${customer.name || 'Customer'}! 🎂🎉\n\nCelebrate with *10% OFF* your next purchase at LOOKSTYLO FASHION. Show us this message to redeem your birthday offer.\n\nWishing you a wonderful birthday!`;
+                openWhatsAppMsg(phone, message);
+                showNotification(`Birthday offer opened for ${customer.name || 'customer'}. Press Send in WhatsApp to deliver it.`);
+            };
+
             const handleUpdatePayment = () => {
                 let newlyCleared = false;
                 let updatedBillDetails = null;
@@ -1246,6 +1284,7 @@
                 isEditingRef.current = true; 
                 setBillInvoice(billToEdit.id); setBillDate(billToEdit.date); setBillType('Standard');
                 setBillCustomerName(billToEdit.customer === 'Walk-in' ? '' : billToEdit.customer);
+                setBillCustomerDob(billToEdit.dob || customers[normalizePhoneKey(billToEdit.phone)]?.dob || '');
                 setBillCustomerPhone(billToEdit.phone || ''); setBillCustomerAddress(billToEdit.address || '');
                 setBillName(billToEdit.billToName || '');
                 setRedeem1000(Boolean(billToEdit.redeemed));
@@ -1271,14 +1310,98 @@
             }, [orderId, toName, toAddress, toPhone, billName, billAddress, billPhone]);
 
             useEffect(() => {
-                const draft = { billDate, billInvoice, billType, billCustomerName, billCustomerPhone, billCustomerAddress, billDelivery, billCourier, billTracking, billDiscount, billPromoCode, billItems, paidGpay, paidCash, paymentMode, paidCashBreakdown, advancePayment, billDescription, redeem1000 };
+                const draft = { billDate, billInvoice, billType, billCustomerName, billCustomerDob, billCustomerPhone, billCustomerAddress, billDelivery, billCourier, billTracking, billDiscount, billPromoCode, billItems, paidGpay, paidCash, paymentMode, paidCashBreakdown, advancePayment, billDescription, redeem1000 };
                 localStorage.setItem('billingDraft', JSON.stringify(draft));
-            }, [billDate, billInvoice, billType, billCustomerName, billCustomerPhone, billCustomerAddress, billDelivery, billCourier, billTracking, billDiscount, billPromoCode, billItems, paidGpay, paidCash, paymentMode, paidCashBreakdown, advancePayment, billDescription, redeem1000]);
+            }, [billDate, billInvoice, billType, billCustomerName, billCustomerDob, billCustomerPhone, billCustomerAddress, billDelivery, billCourier, billTracking, billDiscount, billPromoCode, billItems, paidGpay, paidCash, paymentMode, paidCashBreakdown, advancePayment, billDescription, redeem1000]);
+
+            useEffect(() => {
+                const phoneKey = normalizePhoneKey(billCustomerPhone);
+                if (phoneKey.length !== 12 || !phoneKey.startsWith('91')) return;
+                const timer = setTimeout(() => {
+                    setCustomers(previous => {
+                        const existing = previous[phoneKey] || { name: '', address: '', dob: '', points: 0 };
+                        const updated = {
+                            ...previous,
+                            [phoneKey]: {
+                                ...existing,
+                                name: billCustomerName || existing.name || '',
+                                address: billCustomerAddress || existing.address || '',
+                                dob: billCustomerDob
+                            }
+                        };
+                        localStorage.setItem('customers', JSON.stringify(updated));
+                        return updated;
+                    });
+                }, 400);
+                return () => clearTimeout(timer);
+            }, [billCustomerPhone, billCustomerName, billCustomerDob, billCustomerAddress]);
+
+            useEffect(() => {
+                if (activeTab !== 'generator' || billDelivery !== 'Courier') return;
+                setOrderId(billTracking || billInvoice);
+                setToName(billCustomerName);
+                setToPhone(billCustomerPhone);
+                setToAddress(billCustomerAddress);
+            }, [activeTab, billDelivery, billTracking, billInvoice, billCustomerName, billCustomerPhone, billCustomerAddress]);
+
+            const handleCourierAddressFieldChange = async (field, value) => {
+                const fieldValue = field === 'PIN Code' ? value.replace(/\D/g, '').slice(0, 6) : value;
+                setBillCustomerAddress(current => updateCourierAddressValue(current, field, fieldValue));
+                if (field !== 'PIN Code') return;
+
+                const requestId = ++pinLookupRequestRef.current;
+                if (fieldValue.length !== 6) {
+                    setPinLookupStatus('');
+                    return;
+                }
+
+                const areaBeforeLookup = getCourierAddressValue(billCustomerAddress, 'Area');
+                const blockBeforeLookup = getCourierAddressValue(billCustomerAddress, 'Block/Taluk');
+                const districtBeforeLookup = getCourierAddressValue(billCustomerAddress, 'District');
+                setPinLookupStatus('Looking up area, block/taluk and district...');
+                try {
+                    const response = await fetch(`https://api.postalpincode.in/pincode/${fieldValue}`);
+                    const results = await response.json();
+                    if (requestId !== pinLookupRequestRef.current) return;
+
+                    const postOffice = results?.[0]?.Status === 'Success' ? results[0].PostOffice?.[0] : null;
+                    if (!postOffice || !postOffice.Name) {
+                        setPinLookupStatus('PIN code not found. Enter the area manually.');
+                        return;
+                    }
+                    const currentDistrict = getCurrentPostalDistrict(postOffice);
+                    const postalBlock = String(postOffice.Block || '').trim();
+                    const currentBlock = postalBlock && postalBlock.toLowerCase() !== 'na' ? postalBlock : '';
+
+                    setBillCustomerAddress(current => {
+                        if (getCourierAddressValue(current, 'PIN Code') !== fieldValue) return current;
+                        let updatedAddress = current;
+                        if (getCourierAddressValue(current, 'Area') === areaBeforeLookup) {
+                            updatedAddress = updateCourierAddressValue(updatedAddress, 'Area', postOffice.Name);
+                        }
+                        if (currentBlock && getCourierAddressValue(current, 'Block/Taluk') === blockBeforeLookup) {
+                            updatedAddress = updateCourierAddressValue(updatedAddress, 'Block/Taluk', currentBlock);
+                        }
+                        if (currentDistrict && getCourierAddressValue(current, 'District') === districtBeforeLookup) {
+                            updatedAddress = updateCourierAddressValue(updatedAddress, 'District', currentDistrict);
+                        }
+                        return updatedAddress;
+                    });
+                    const foundLabels = [postOffice.Name];
+                    if (currentBlock) foundLabels.push(currentBlock);
+                    if (currentDistrict) foundLabels.push(currentDistrict);
+                    const foundDescription = currentDistrict ? (currentBlock ? 'Area, block/taluk and district' : 'Area and district') : (currentBlock ? 'Area and block/taluk' : 'Area');
+                    setPinLookupStatus(`${foundDescription} found: ${foundLabels.join(', ')}`);
+                } catch (error) {
+                    if (requestId === pinLookupRequestRef.current) setPinLookupStatus('PIN lookup unavailable. Enter the area, block/taluk and district manually.');
+                }
+            };
 
             const handlePhoneChange = (e) => {
                 const val = e.target.value;
                 setBillCustomerPhone(val);
                 const nk = normalizePhoneKey(val);
+                setBillCustomerDob(customers[nk]?.dob || '');
                 if (nk && customers[nk]) {
                     if (!billCustomerName) setBillCustomerName(customers[nk].name || '');
                     if (!billCustomerAddress) setBillCustomerAddress(customers[nk].address || '');
@@ -1594,11 +1717,13 @@
                 };
             }, [activeTab, scanResult]);
 
-            const saveCurrentBill = () => {
-                if (grandTotal <= 0 && totalQty === 0) return;
+            const saveCurrentBill = ({ applyLoyalty = true } = {}) => {
+                const hasBillItems = billItems.some(item => String(item.particular || '').trim() && Number(item.qty) > 0);
+                const hasPayment = Number(paidCash) > 0 || Number(paidGpay) > 0 || Number(advancePayment) > 0;
+                if (!hasBillItems && !hasPayment) return false;
                 const newBill = {
                     id: billInvoice, date: billDate, type: billType, customer: billCustomerName || 'Walk-in',
-                    phone: billCustomerPhone, address: billCustomerAddress, delivery: billDelivery,
+                    phone: billCustomerPhone, dob: billCustomerDob, address: billCustomerAddress, delivery: billDelivery,
                     courier: billCourier, tracking: billTracking, discount: billDiscount, promoCode: billPromoCode,
                     items: billItems, total: grandTotal, cash: Number(paidCash) || 0, gpay: Number(paidGpay) || 0,
                     advance: Number(advancePayment) || 0, balance: balanceAmount, description: billDescription,
@@ -1612,6 +1737,7 @@
                     localStorage.setItem('savedBills', JSON.stringify(updated));
                     return updated;
                 });
+                if (!applyLoyalty) return true;
 
                 const applyPointsToCustomer = (phone, pointsEarned, redeemedFlag) => {
                     setCustomers(prev => {
@@ -1622,7 +1748,7 @@
                         const redeemed = redeemedFlag && (pointsBefore >= 1000);
                         const pointsAfter = Math.max(0, pointsBefore - (redeemed ? 1000 : 0) + (pointsEarned || 0));
 
-                        const updatedEntry = { name: billCustomerName, address: billCustomerAddress, points: pointsAfter };
+                        const updatedEntry = { ...existing, name: billCustomerName, address: billCustomerAddress, dob: billCustomerDob, points: pointsAfter };
                         const updated = { ...prev, [phoneKey]: updatedEntry };
                         localStorage.setItem('customers', JSON.stringify(updated));
                         setAvailablePoints(pointsAfter);
@@ -1667,7 +1793,9 @@
 
             useEffect(() => {
                 const timer = setTimeout(() => {
-                    if (totalQty > 0 || paidCash > 0 || paidGpay > 0 || advancePayment > 0) { saveCurrentBill(); }
+                    const hasBillItems = billItems.some(item => String(item.particular || '').trim() && Number(item.qty) > 0);
+                    const hasPayment = Number(paidCash) > 0 || Number(paidGpay) > 0 || Number(advancePayment) > 0;
+                    if (hasBillItems || hasPayment) saveCurrentBill({ applyLoyalty: false });
                 }, 1000); 
                 return () => clearTimeout(timer);
             }, [billInvoice, billDate, billType, billCustomerName, billCustomerPhone, billCustomerAddress, billDelivery, billCourier, billTracking, billDiscount, billPromoCode, billItems, grandTotal, paidCash, paidGpay, advancePayment, balanceAmount, totalQty, billDescription]);
@@ -1693,7 +1821,7 @@
                 }
 
                 isEditingRef.current = false;
-                setBillCustomerName(''); setBillType('Standard'); setBillCustomerPhone(''); setBillCustomerAddress('');
+                setBillCustomerName(''); setBillCustomerDob(''); setBillType('Standard'); setBillCustomerPhone(''); setBillCustomerAddress('');
                 setBillTracking(''); setBillDiscount(0); setPaidGpay(0); setPaidCash(0); setPaymentMode('Cash'); setAdvancePayment(0); setBillPromoCode('NO CODE');
                 setBillDescription(''); setRedeem1000(false); setAvailablePoints(0);
                 setBillItems([{ id: generateSafeId(), particular: '', hsn: '', qty: 1, rate: 0 }]); 
@@ -1763,6 +1891,33 @@ const stringifyIfNeeded = (value) => {
             
             const currentMonthStr = todayStr.substring(0, 7); 
             const currentYearStr = todayStr.substring(0, 4); 
+            const getBirthdayReminderDate = (dob, year) => {
+                const [, monthPart, dayPart] = String(dob || '').split('-');
+                const month = Number(monthPart);
+                let day = Number(dayPart);
+                if (!month || !day) return '';
+                const isLeapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+                if (month === 2 && day === 29 && !isLeapYear) day = 28;
+                const reminderDate = new Date(Date.UTC(year, month - 1, day));
+                reminderDate.setUTCDate(reminderDate.getUTCDate() - 2);
+                return reminderDate.toISOString().slice(0, 10);
+            };
+            const birthdayOffersDueToday = Object.entries(customers)
+                .filter(([phone, customer]) => {
+                    const digits = String(phone).replace(/\D/g, '');
+                    if (!customer?.dob || (digits.length !== 10 && !(digits.length === 12 && digits.startsWith('91')))) return false;
+                    const currentYear = Number(todayStr.substring(0, 4));
+                    return [currentYear, currentYear + 1].some(year => getBirthdayReminderDate(customer.dob, year) === todayStr);
+                })
+                .map(([phone, customer]) => ({ ...customer, phone }));
+            const customerDirectory = Object.entries(customers)
+                .map(([phone, customer]) => {
+                    const digits = String(phone).replace(/\D/g, '');
+                    const displayPhone = digits.length === 12 && digits.startsWith('91') ? `+91 ${digits.slice(2)}` : digits;
+                    return { phone, displayPhone, name: customer?.name || '', dob: customer?.dob || '' };
+                })
+                .filter(customer => `${customer.name} ${customer.phone} ${customer.displayPhone} ${customer.dob}`.toLowerCase().includes(customerSearch.trim().toLowerCase()))
+                .sort((first, second) => first.name.localeCompare(second.name));
             const [reportType, setReportType] = useState('all'); 
             const [reportDate, setReportDate] = useState(todayStr);
             const [reportMonth, setReportMonth] = useState(currentMonthStr);
@@ -1790,8 +1945,8 @@ const stringifyIfNeeded = (value) => {
 
             const totalReportExpenses = reportExpenses.reduce((acc, e) => acc + (e.amount || 0), 0);
             const totalReportSales = reportBills.reduce((acc, b) => acc + (b.total || 0), 0);
-            const totalReportCash = reportBills.reduce((acc, b) => acc + (b.cash || 0), 0);
-            const totalReportGpay = reportBills.reduce((acc, b) => acc + (b.gpay || 0), 0);
+            const totalReportCash = reportBills.reduce((acc, b) => acc + (Number(b.cash) || 0), 0);
+            const totalReportGpay = reportBills.reduce((acc, b) => acc + (Number(b.gpay) || 0), 0);
             const totalReportAdvance = reportBills.reduce((acc, b) => acc + (b.advance || 0), 0);
             const totalReportBalance = reportBills.reduce((acc, b) => acc + (b.balance || 0), 0);
             
@@ -1904,7 +2059,7 @@ const stringifyIfNeeded = (value) => {
                                 <div className="font-bold uppercase text-gray-900 mb-1">Name: <span className="font-normal">{billCustomerName || 'Walk-in Customer'}</span></div>
                                 <div className="font-bold uppercase text-gray-900 mb-1">Phone: <span className="font-normal">{billCustomerPhone || 'Not provided'}</span></div>
                                 <div className="font-bold uppercase text-gray-900 mb-1">Del: <span className="font-normal">{billDelivery || 'Store Walk-in'}</span></div>
-                                {billCustomerAddress && (
+                                {billDelivery === 'Courier' && billCustomerAddress && (
                                     <div className="font-bold uppercase text-gray-900">Address: <span className="font-normal whitespace-pre-wrap">{billCustomerAddress}</span></div>
                                 )}
                             </div>
@@ -2239,7 +2394,7 @@ const stringifyIfNeeded = (value) => {
                     )}
 
                     {/* Floating Denomination Calculator Button */}
-                    <button title="Cash Denominations" onClick={() => setShowDenomModal(true)} className="fixed right-6 bottom-6 z-[300] bg-indigo-600 hover:bg-indigo-700 text-white p-4 rounded-full shadow-2xl">
+                    <button title="Cash Denominations" onClick={() => setShowDenomModal(true)} className="fixed right-6 bottom-6 z-[300] bg-indigo-600 hover:bg-indigo-700 text-white p-4 rounded-full shadow-2xl no-print">
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .672-3 1.5S10.343 11 12 11s3-.672 3-1.5S13.657 8 12 8zM12 13.5c-1.657 0-3 .672-3 1.5S10.343 16.5 12 16.5s3-.672 3-1.5S13.657 13.5 12 13.5z"/></svg>
                     </button>
 
@@ -2359,6 +2514,7 @@ const stringifyIfNeeded = (value) => {
                                             <TabButton id="billing" label="Billing" activeTab={activeTab} setActiveTab={setActiveTab} />
                                             <TabButton id="inventory" label="Inventory" activeTab={activeTab} setActiveTab={setActiveTab} />
                                             <TabButton id="expenses" label="Expenses" activeTab={activeTab} setActiveTab={setActiveTab} />
+                                            <TabButton id="customers" label="Customers" activeTab={activeTab} setActiveTab={setActiveTab} />
                                             <TabButton id="reports" label="Reports" activeTab={activeTab} setActiveTab={setActiveTab} />
                                             <TabButton id="generator" label="Labels" activeTab={activeTab} setActiveTab={setActiveTab} />
                                             <TabButton id="pricetags" label="Price Tags" activeTab={activeTab} setActiveTab={setActiveTab} />
@@ -2375,6 +2531,7 @@ const stringifyIfNeeded = (value) => {
                                     <TabButton id="billing" label="Billing" activeTab={activeTab} setActiveTab={setActiveTab} />
                                     <TabButton id="inventory" label="Inventory" activeTab={activeTab} setActiveTab={setActiveTab} />
                                     <TabButton id="expenses" label="Expenses" activeTab={activeTab} setActiveTab={setActiveTab} />
+                                    <TabButton id="customers" label="Customers" activeTab={activeTab} setActiveTab={setActiveTab} />
                                     <TabButton id="reports" label="Reports" activeTab={activeTab} setActiveTab={setActiveTab} />
                                     <TabButton id="generator" label="Labels" activeTab={activeTab} setActiveTab={setActiveTab} />
                                     <TabButton id="pricetags" label="Price Tags" activeTab={activeTab} setActiveTab={setActiveTab} />
@@ -2417,6 +2574,7 @@ const stringifyIfNeeded = (value) => {
                                         <ModernInput label="Date" type="date" value={billDate} onChange={e=>setBillDate(e.target.value)} />
                                         <ModernInput label="Phone Number" type="text" value={billCustomerPhone} onChange={handlePhoneChange} placeholder="Enter Phone to Auto-Fill" className="md:col-span-1 border-slate-200 focus:border-indigo-500 font-mono" />
                                         <ModernInput label="Customer Name" type="text" value={billCustomerName} onChange={e=>setBillCustomerName(e.target.value)} placeholder="Walk-in Customer" className="md:col-span-2" />
+                                        <ModernInput label="Customer Date of Birth" type="date" value={billCustomerDob} onChange={e=>setBillCustomerDob(e.target.value)} className="md:col-span-1" />
                                         
                                         <div className="md:col-span-3 flex items-center gap-4 mt-2">
                                             <div className="text-sm text-slate-700 font-bold">Loyalty Points: <span className="text-indigo-700">{availablePoints}</span></div>
@@ -2450,6 +2608,13 @@ const stringifyIfNeeded = (value) => {
                                                     </select>
                                                 </div>
                                                 <ModernInput label="Tracking ID" type="text" value={billTracking} onChange={e=>setBillTracking(e.target.value)} placeholder="Tracking No." />
+                                                {COURIER_ADDRESS_FIELDS.map(field => (
+                                                    <div key={field}>
+                                                        <ModernInput label={field} type="text" inputMode={field === 'PIN Code' ? 'numeric' : undefined} pattern={field === 'PIN Code' ? '[0-9]{6}' : undefined} value={getCourierAddressValue(billCustomerAddress, field)} onChange={e=>handleCourierAddressFieldChange(field, e.target.value)} placeholder={field === 'PIN Code' ? '6-Digit PIN Code' : field === 'Door No.' ? 'Door/Building Number' : `${field} Name`} maxLength={field === 'PIN Code' ? 6 : undefined} />
+                                                        {field === 'PIN Code' && pinLookupStatus && <p role="status" className="mt-1 text-xs font-medium text-slate-500">{pinLookupStatus}</p>}
+                                                    </div>
+                                                ))}
+                                                <div className="md:col-span-2 text-xs font-semibold text-slate-500">State: Tamil Nadu · Country: India</div>
                                             </div>
                                         )}
                                     </div>
@@ -2588,7 +2753,7 @@ const stringifyIfNeeded = (value) => {
 
                                         {billDelivery === 'Courier' && (
                                         <div className="a5-container relative print:scale-100 transform origin-top scale-[0.85] md:scale-95 transition-all hover:shadow-lg print:flex mt-4">
-                                            <LabelContent copyLabel="Shipping Label" orderId={billTracking || billInvoice} toName={billCustomerName} toAddress={billCustomerAddress} toPhone={billCustomerPhone} billName={billName} billAddress={billCustomerAddress} billPhone={billCustomerPhone} logoUrl={logoUrl} loyaltyPoints={(billCustomerPhone && customers[normalizePhoneKey(billCustomerPhone)] && customers[normalizePhoneKey(billCustomerPhone)].points) ? customers[normalizePhoneKey(billCustomerPhone)].points : availablePoints} />
+                                            <LabelContent copyLabel="Shipping Label" orderId={billTracking || billInvoice} toName={billCustomerName} toAddress={billCustomerAddress} toPhone={billCustomerPhone} logoUrl={logoUrl} />
                                         </div>
                                     )}
                                 </div>
@@ -2839,6 +3004,42 @@ const stringifyIfNeeded = (value) => {
                             </div>
                         )}
 
+                        {/* -------------------- TAB: CUSTOMERS -------------------- */}
+                        {activeTab === 'customers' && (
+                            <div className="w-full max-w-6xl mx-auto bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-slate-200 h-fit">
+                                <div className="flex flex-col gap-4 border-b border-slate-100 pb-5 mb-5 sm:flex-row sm:items-end sm:justify-between">
+                                    <div>
+                                        <h2 className="text-2xl font-black text-slate-900 tracking-tight">Customer Data</h2>
+                                        <p className="mt-1 text-sm font-medium text-slate-500">{Object.keys(customers).length} customers · {Object.values(customers).filter(customer => customer?.dob).length} with date of birth</p>
+                                    </div>
+                                    <input type="search" value={customerSearch} onChange={e=>setCustomerSearch(e.target.value)} placeholder="Search name, phone, or DOB" aria-label="Search customers" className="w-full sm:max-w-sm p-3 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-sm font-medium text-slate-800 shadow-sm" />
+                                </div>
+
+                                <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                                    <table className="w-full min-w-[560px] text-left border-collapse">
+                                        <thead className="bg-slate-50 border-b border-slate-200 text-xs uppercase tracking-wider text-slate-500">
+                                            <tr>
+                                                <th className="p-4 font-bold">Name</th>
+                                                <th className="p-4 font-bold">Phone</th>
+                                                <th className="p-4 font-bold">Date of Birth</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="bg-white divide-y divide-slate-100">
+                                            {customerDirectory.length === 0 ? (
+                                                <tr><td colSpan="3" className="p-8 text-center text-sm font-medium text-slate-400">{Object.keys(customers).length ? 'No customers match this search.' : 'Customer profiles will appear here when a phone number is saved.'}</td></tr>
+                                            ) : customerDirectory.map(customer => (
+                                                <tr key={customer.phone} className="hover:bg-slate-50">
+                                                    <td className="p-4 font-semibold text-slate-900">{customer.name || 'Name not provided'}</td>
+                                                    <td className="p-4 font-mono text-sm text-slate-700">{customer.displayPhone || customer.phone}</td>
+                                                    <td className="p-4 text-sm text-slate-700">{customer.dob ? new Date(`${customer.dob}T00:00:00`).toLocaleDateString('en-IN') : <span className="text-slate-400">Not provided</span>}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
+
                         {/* -------------------- TAB: REPORTS -------------------- */}
                         {activeTab === 'reports' && (
                             <div className="w-full max-w-6xl mx-auto bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-slate-200 print:border-none print:shadow-none print:p-0">
@@ -2888,24 +3089,57 @@ const stringifyIfNeeded = (value) => {
                                     </div>
                                 </div>
 
-                                <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8 print:gap-4`}>
-                                    <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 flex flex-col justify-center">
+                                <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-8 print:gap-4`}>
+                                    <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200 flex flex-col justify-center">
                                         <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Total Sales</span>
-                                        <span className="text-2xl font-black text-slate-900">₹ {totalReportSales.toLocaleString('en-IN', {minimumFractionDigits:2})}</span>
+                                        <span className="text-xl font-black text-slate-900">₹ {totalReportSales.toLocaleString('en-IN', {minimumFractionDigits:2})}</span>
                                     </div>
-                                    <div className="bg-emerald-50 p-6 rounded-2xl border border-emerald-100 flex flex-col justify-center">
+                                    <div className="bg-emerald-50 p-5 rounded-2xl border border-emerald-100 flex flex-col justify-center">
+                                        <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest mb-1">Cash Collected</span>
+                                        <span className="text-xl font-black text-emerald-800">₹ {totalReportCash.toLocaleString('en-IN', {minimumFractionDigits:2})}</span>
+                                    </div>
+                                    <div className="bg-blue-50 p-5 rounded-2xl border border-blue-100 flex flex-col justify-center">
+                                        <span className="text-[10px] font-bold text-blue-600 uppercase tracking-widest mb-1">GPay Collected</span>
+                                        <span className="text-xl font-black text-blue-800">₹ {totalReportGpay.toLocaleString('en-IN', {minimumFractionDigits:2})}</span>
+                                    </div>
+                                    <div className="bg-emerald-50 p-5 rounded-2xl border border-emerald-100 flex flex-col justify-center">
                                         <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest mb-1">Total Collections</span>
-                                        <span className="text-2xl font-black text-emerald-800">₹ {(totalReportCash + totalReportGpay + totalReportAdvance).toLocaleString('en-IN', {minimumFractionDigits:2})}</span>
+                                        <span className="text-xl font-black text-emerald-800">₹ {(totalReportCash + totalReportGpay + totalReportAdvance).toLocaleString('en-IN', {minimumFractionDigits:2})}</span>
                                     </div>
-                                    <div className="bg-amber-50 p-6 rounded-2xl border border-amber-100 flex flex-col justify-center">
+                                    <div className="bg-amber-50 p-5 rounded-2xl border border-amber-100 flex flex-col justify-center">
                                         <span className="text-[10px] font-bold text-amber-600 uppercase tracking-widest mb-1">Total Pending</span>
-                                        <span className="text-2xl font-black text-amber-800">₹ {totalReportBalance.toLocaleString('en-IN', {minimumFractionDigits:2})}</span>
+                                        <span className="text-xl font-black text-amber-800">₹ {totalReportBalance.toLocaleString('en-IN', {minimumFractionDigits:2})}</span>
                                     </div>
-                                    <div className="bg-red-50 p-6 rounded-2xl border border-red-100 flex flex-col justify-center">
+                                    <div className="bg-red-50 p-5 rounded-2xl border border-red-100 flex flex-col justify-center">
                                         <span className="text-[10px] font-bold text-red-600 uppercase tracking-widest mb-1">Total Expenses</span>
-                                        <span className="text-2xl font-black text-red-800">₹ {totalReportExpenses.toLocaleString('en-IN', {minimumFractionDigits:2})}</span>
+                                        <span className="text-xl font-black text-red-800">₹ {totalReportExpenses.toLocaleString('en-IN', {minimumFractionDigits:2})}</span>
                                     </div>
                                 </div>
+
+                                {birthdayOffersDueToday.length > 0 && (
+                                    <section className="mb-8 rounded-2xl border border-rose-200 bg-rose-50 p-5 print:hidden">
+                                        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                                            <div>
+                                                <h3 className="text-sm font-black uppercase text-rose-900">Birthday Offers To Send Today</h3>
+                                                <p className="mt-1 text-xs font-medium text-rose-700">Scheduled for 2 days before each birthday. WhatsApp opens with the 10% offer ready; press Send to deliver.</p>
+                                            </div>
+                                            <span className="rounded-full border border-rose-200 bg-white px-3 py-1 text-xs font-bold text-rose-700">{birthdayOffersDueToday.length} customer(s)</span>
+                                        </div>
+                                        <div className="divide-y divide-rose-200">
+                                            {birthdayOffersDueToday.map(customer => (
+                                                <div key={customer.phone} className="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                                                    <div>
+                                                        <p className="font-bold text-slate-900">{customer.name || 'Customer'}</p>
+                                                        <p className="font-mono text-xs text-slate-600">{customer.phone}</p>
+                                                    </div>
+                                                    <button type="button" onClick={() => sendBirthdayOfferWhatsApp(customer)} className="flex items-center gap-2 rounded-lg bg-rose-700 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-rose-800">
+                                                        <WhatsAppIcon className="h-4 w-4" /> Send 10% Birthday Offer
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </section>
+                                )}
 
                                 <div className="border border-slate-200 rounded-2xl overflow-hidden print:border-none">
                                     <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex justify-between items-center print:hidden">
