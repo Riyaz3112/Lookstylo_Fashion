@@ -913,6 +913,9 @@
             const [billDiscount, setBillDiscount] = useState(bDraft.billDiscount || 0);
             const [billPromoCode, setBillPromoCode] = useState(bDraft.billPromoCode || 'NO CODE');
             const [billItems, setBillItems] = useState(bDraft.billItems || [{ id: generateSafeId(), particular: '', hsn: '', qty: 1, rate: 0 }]);
+            const [barcodeScanItemId, setBarcodeScanItemId] = useState(null);
+            const [barcodeScanError, setBarcodeScanError] = useState('');
+            const invoiceBarcodeScannerRef = useRef(null);
             
             const [paidGpay, setPaidGpay] = useState(bDraft.paidGpay || 0);
             const [paidCash, setPaidCash] = useState(bDraft.paidCash || 0);
@@ -1446,80 +1449,6 @@
             const fallbackFrameRef = useRef(null);
             const scannerModeRef = useRef(null);
 
-            // Price Tag State Variables
-            const [priceTagItems, setPriceTagItems] = useState(() => JSON.parse(localStorage.getItem('priceTagItems') || '[]'));
-            const [newPriceTagProduct, setNewPriceTagProduct] = useState('');
-            const [newPriceTagSKU, setNewPriceTagSKU] = useState('');
-            const [newPriceTagPrice, setNewPriceTagPrice] = useState('');
-            const [newPriceTagQty, setNewPriceTagQty] = useState(27);
-
-            const addPriceTagItem = () => {
-                if (!newPriceTagProduct.trim() || !newPriceTagPrice.trim()) {
-                    showNotification("Please fill in Product Name and Price");
-                    return;
-                }
-                const newItem = {
-                    id: generateSafeId(),
-                    product: newPriceTagProduct.trim(),
-                    sku: newPriceTagSKU.trim(),
-                    price: newPriceTagPrice.trim(),
-                    qty: Math.max(1, Math.min(27, Math.floor(Number(newPriceTagQty) || 27))),
-                    qrData: `Product: ${newPriceTagProduct.trim()}\nPrice: ₹${newPriceTagPrice.trim()}\nSKU: ${newPriceTagSKU.trim() || 'N/A'}`
-                };
-                const updated = [newItem, ...priceTagItems];
-                setPriceTagItems(updated);
-                localStorage.setItem('priceTagItems', JSON.stringify(updated));
-                setNewPriceTagProduct('');
-                setNewPriceTagSKU('');
-                setNewPriceTagPrice('');
-                setNewPriceTagQty(27);
-                showNotification("Price tag item added!");
-            };
-
-            const deletePriceTag = (id) => {
-                const updated = priceTagItems.filter(item => item.id !== id);
-                setPriceTagItems(updated);
-                localStorage.setItem('priceTagItems', JSON.stringify(updated));
-                showNotification("Item removed!");
-            };
-
-            // Generate QR codes for price tags
-            useEffect(() => {
-                if (priceTagItems.length > 0 && typeof QRCode !== 'undefined') {
-                    // Use setTimeout to ensure DOM is ready
-                    setTimeout(() => {
-                        priceTagItems.forEach((item, itemIdx) => {
-                            for (let idx = 0; idx < item.qty; idx++) {
-                                const elementId = `qr-label-${item.id}-${idx}`;
-                                const element = document.getElementById(elementId);
-                                
-                                if (element && !element.hasChildNodes()) {
-                                    try {
-                                        // Clear any previous content
-                                        element.innerHTML = '';
-                                        
-                                        // Create QR code with proper error handling
-                                        new QRCode(element, {
-                                            text: item.qrData || `${item.product}-${item.price}-${item.sku}`,
-                                            width: 38,
-                                            height: 38,
-                                            colorDark: '#000000',
-                                            colorLight: '#ffffff',
-                                            correctLevel: QRCode.CorrectLevel.L,
-                                            useSVG: false
-                                        });
-                                    } catch (err) {
-                                        console.warn('QR code generation error:', err);
-                                        // Fallback: show simple text if QR fails
-                                        element.innerHTML = `<div style="font-size:8px;text-align:center;color:#999;padding:8px;font-weight:bold;">QR</div>`;
-                                    }
-                                }
-                            }
-                        });
-                    }, 200);
-                }
-            }, [priceTagItems]);
-
             const saveScanToDatabase = (data) => {
                 setSavedScans(prev => {
                     const newScan = { ...data, scanId: generateSafeId(), scanDate: new Date().toLocaleString(), trackingId: null };
@@ -1902,8 +1831,10 @@ const stringifyIfNeeded = (value) => {
                     if (i.id === id) {
                         let updated = { ...i, [field]: value }; 
                         if (field === 'particular') {
-                            const upperVal = value.toUpperCase();
-                            const foundItem = inventory.find(inv => inv.name.toUpperCase() === upperVal || inv.sku === upperVal);
+                            const normalizedValue = String(value || '').trim().toUpperCase();
+                            const foundItem = inventory.find(inv =>
+                                [inv.name, inv.sku, inv.barcode].some(candidate => String(candidate || '').trim().toUpperCase() === normalizedValue)
+                            );
                             
                             if (foundItem) {
                                 updated.particular = foundItem.name; 
@@ -1919,6 +1850,102 @@ const stringifyIfNeeded = (value) => {
             
             const addBillItem = () => setBillItems([...billItems, { id: generateSafeId(), particular: '', hsn: '', qty: 1, rate: 0 }]);
             const removeBillItem = (id) => setBillItems(billItems.filter(i => i.id !== id));
+
+            const openInvoiceBarcodeScanner = (itemId) => {
+                setBarcodeScanError('');
+                setBarcodeScanItemId(itemId);
+            };
+
+            useEffect(() => {
+                if (!barcodeScanItemId) return;
+
+                let isActive = true;
+                const startInvoiceScanner = async () => {
+                    if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+                        setBarcodeScanError('Camera scanning requires HTTPS or http://localhost.');
+                        return;
+                    }
+                    if (!window.Html5Qrcode) {
+                        setBarcodeScanError('Camera scanner is unavailable. Refresh the page and try again.');
+                        return;
+                    }
+
+                    try {
+                        const formats = window.Html5QrcodeSupportedFormats
+                            ? [
+                                window.Html5QrcodeSupportedFormats.CODE_128,
+                                window.Html5QrcodeSupportedFormats.CODE_39,
+                                window.Html5QrcodeSupportedFormats.EAN_13,
+                                window.Html5QrcodeSupportedFormats.EAN_8,
+                                window.Html5QrcodeSupportedFormats.UPC_A,
+                                window.Html5QrcodeSupportedFormats.UPC_E,
+                                window.Html5QrcodeSupportedFormats.ITF
+                            ].filter(format => typeof format === 'number')
+                            : undefined;
+                        const scanner = new window.Html5Qrcode('invoice-barcode-reader', { formatsToSupport: formats });
+                        invoiceBarcodeScannerRef.current = scanner;
+                        const cameraConfigs = [
+                            { facingMode: 'environment' },
+                            { facingMode: 'user' },
+                            { facingMode: { exact: 'environment' } }
+                        ];
+                        const onBarcodeDecoded = (decodedText) => {
+                            if (!isActive) return;
+                            const code = String(decodedText || '').trim().toUpperCase();
+                            const foundItem = inventory.find(inv =>
+                                [inv.name, inv.sku, inv.barcode].some(value => String(value || '').trim().toUpperCase() === code)
+                            );
+
+                            if (!foundItem) {
+                                setBarcodeScanError(`No inventory item found for ${decodedText}.`);
+                                return;
+                            }
+
+                            updateBillItem(barcodeScanItemId, 'particular', foundItem.name);
+                            setBarcodeScanItemId(null);
+                        };
+                        let lastCameraError = null;
+                        for (const cameraConfig of cameraConfigs) {
+                            try {
+                                await scanner.start(
+                                    cameraConfig,
+                                    { fps: 10, qrbox: { width: 260, height: 160 } },
+                                    onBarcodeDecoded,
+                                    () => {}
+                                );
+                                lastCameraError = null;
+                                break;
+                            } catch (error) {
+                                lastCameraError = error;
+                                console.warn('Invoice camera attempt failed:', cameraConfig, error);
+                            }
+                        }
+                        if (lastCameraError) throw lastCameraError;
+                        if (isActive) setBarcodeScanError('');
+                    } catch (error) {
+                        const cameraErrorMessages = {
+                            NotAllowedError: 'Camera access is blocked. Allow camera permission for this site, then try again.',
+                            SecurityError: 'Camera access is blocked by browser security settings. Open this site on localhost or HTTPS.',
+                            NotFoundError: 'No camera was found. Connect or enable a camera, or enter the item manually.',
+                            NotReadableError: 'The camera is busy in another app. Close other camera apps and try again.'
+                        };
+                        if (isActive) setBarcodeScanError(cameraErrorMessages[error.name] || `Camera could not start: ${error.message || 'check camera permission and try again.'}`);
+                        console.error('Invoice barcode scanner failed:', error);
+                    }
+                };
+
+                void startInvoiceScanner();
+                return () => {
+                    isActive = false;
+                    const scanner = invoiceBarcodeScannerRef.current;
+                    invoiceBarcodeScannerRef.current = null;
+                    if (scanner) {
+                        scanner.stop().catch(() => {}).finally(() => {
+                            try { scanner.clear(); } catch (error) { console.warn('Invoice scanner cleanup failed:', error); }
+                        });
+                    }
+                };
+            }, [barcodeScanItemId]);
             
             const currentMonthStr = todayStr.substring(0, 7); 
             const currentYearStr = todayStr.substring(0, 4); 
@@ -2548,7 +2575,7 @@ const stringifyIfNeeded = (value) => {
                                             <TabButton id="customers" label="Customers" activeTab={activeTab} setActiveTab={setActiveTab} />
                                             <TabButton id="reports" label="Reports" activeTab={activeTab} setActiveTab={setActiveTab} />
                                             <TabButton id="generator" label="Labels" activeTab={activeTab} setActiveTab={setActiveTab} />
-                                            <TabButton id="pricetags" label="Price Tags" activeTab={activeTab} setActiveTab={setActiveTab} />
+                                            <a href="barcode.html" className="min-w-[90px] px-4 py-3 rounded-full font-semibold text-sm whitespace-nowrap border text-slate-300 border-slate-700/20 hover:bg-slate-800 hover:text-white hover:border-slate-400">Barcode</a>
                                             <TabButton id="scanner" label="Scanner" activeTab={activeTab} setActiveTab={setActiveTab} />
                                             <TabButton id="calculator" label="Calculator" activeTab={activeTab} setActiveTab={setActiveTab} />
                                             <TabButton id="settings" label="Settings" activeTab={activeTab} setActiveTab={setActiveTab} />
@@ -2565,7 +2592,7 @@ const stringifyIfNeeded = (value) => {
                                     <TabButton id="customers" label="Customers" activeTab={activeTab} setActiveTab={setActiveTab} />
                                     <TabButton id="reports" label="Reports" activeTab={activeTab} setActiveTab={setActiveTab} />
                                     <TabButton id="generator" label="Labels" activeTab={activeTab} setActiveTab={setActiveTab} />
-                                    <TabButton id="pricetags" label="Price Tags" activeTab={activeTab} setActiveTab={setActiveTab} />
+                                    <a href="barcode.html" className="min-w-[90px] px-4 py-3 rounded-full font-semibold text-sm whitespace-nowrap border text-slate-300 border-slate-700/20 hover:bg-slate-800 hover:text-white hover:border-slate-400">Barcode</a>
                                     <TabButton id="scanner" label="Scanner" activeTab={activeTab} setActiveTab={setActiveTab} />
                                     <TabButton id="calculator" label="Calculator" activeTab={activeTab} setActiveTab={setActiveTab} />
                                     <TabButton id="settings" label="Settings" activeTab={activeTab} setActiveTab={setActiveTab} />
@@ -2662,7 +2689,12 @@ const stringifyIfNeeded = (value) => {
                                             {billItems.map((item, index) => (
                                                 <div key={item.id} className="flex gap-2 items-center group flex-wrap md:flex-nowrap">
                                                     <div className="w-6 text-center text-xs font-bold text-slate-400">{index + 1}.</div>
-                                                    <input list="preset-items" type="text" placeholder="Item Name or Barcode/SKU" value={item.particular} onChange={e=>updateBillItem(item.id, 'particular', e.target.value)} className="flex-grow p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm uppercase outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all w-full md:w-auto font-medium" />
+                                                    <div className="flex flex-grow gap-2 w-full md:w-auto min-w-0">
+                                                        <input list="preset-items" type="text" placeholder="Item Name or Barcode/SKU" value={item.particular} onChange={e=>updateBillItem(item.id, 'particular', e.target.value)} onKeyDown={e=>{if(e.key==='Enter')e.preventDefault();}} className="flex-grow min-w-0 p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm uppercase outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all w-full md:w-auto font-medium" />
+                                                        <button type="button" onClick={() => openInvoiceBarcodeScanner(item.id)} className="shrink-0 p-3 bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 text-indigo-700 rounded-xl transition-colors" title="Scan item barcode" aria-label="Scan item barcode">
+                                                            <Icons.Camera className="w-5 h-5" />
+                                                        </button>
+                                                    </div>
                                                     <input type="text" placeholder="HSN" value={item.hsn || ''} onChange={e=>updateBillItem(item.id, 'hsn', e.target.value)} className="w-20 p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20 transition-all text-center font-semibold text-slate-700" />
                                                     <input type="number" min="1" value={item.qty} placeholder="Qty" onWheel={(e) => e.target.blur()} onChange={e=>updateBillItem(item.id, 'qty', e.target.value)} className="w-16 p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20 transition-all text-center font-semibold text-slate-700" />
                                                     <input type="number" min="0" value={item.rate} placeholder="Rate ₹" onWheel={(e) => e.target.blur()} onChange={e=>updateBillItem(item.id, 'rate', e.target.value)} className="w-24 p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20 transition-all text-right font-semibold text-slate-700" />
@@ -2676,6 +2708,22 @@ const stringifyIfNeeded = (value) => {
                                             </button>
                                         </div>
                                     </div>
+
+                                    {barcodeScanItemId && (
+                                        <div className="fixed inset-0 z-[500] bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="invoice-barcode-scan-title">
+                                            <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-5">
+                                                <div className="flex items-center justify-between mb-4">
+                                                    <h3 id="invoice-barcode-scan-title" className="font-bold text-slate-900">Scan Item Barcode</h3>
+                                                    <button type="button" onClick={() => setBarcodeScanItemId(null)} className="p-2 text-slate-500 hover:bg-slate-100 rounded-lg" aria-label="Close barcode scanner">&times;</button>
+                                                </div>
+                                                <div id="invoice-barcode-reader" className="w-full min-h-[260px] overflow-hidden rounded-xl bg-slate-950"></div>
+                                                <p role="status" className={`mt-3 text-sm ${barcodeScanError ? 'text-rose-600' : 'text-slate-500'}`}>
+                                                    {barcodeScanError || 'Point the camera at an inventory barcode or SKU.'}
+                                                </p>
+                                                <button type="button" onClick={() => setBarcodeScanItemId(null)} className="mt-4 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">Cancel</button>
+                                            </div>
+                                        </div>
+                                    )}
 
                                     <div className="bg-slate-50 rounded-2xl p-5 border border-slate-200">
                                         <div className="flex justify-between items-end mb-2 ml-1">
@@ -3274,131 +3322,6 @@ const stringifyIfNeeded = (value) => {
                                     </div>
                                 </div>
                             </>
-                        )}
-
-                        {/* -------------------- TAB: PRICE TAGS -------------------- */}
-                        {activeTab === 'pricetags' && (
-                            <div className="w-full max-w-6xl mx-auto">
-                                <div className="grid lg:grid-cols-3 gap-6">
-                                    {/* Left Panel - Add Items */}
-                                    <div className="lg:col-span-1 bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-slate-200 h-fit space-y-6 no-print">
-                                        <div>
-                                            <h2 className="text-2xl font-black text-slate-900 border-b border-slate-100 pb-4 mb-6">Add Price Tag</h2>
-                                            <div className="space-y-5">
-                                                <ModernInput label="Product Name" type="text" placeholder="e.g., T-Shirt" value={newPriceTagProduct} onChange={(e) => setNewPriceTagProduct(e.target.value)} />
-                                                <ModernInput label="SKU / Code" type="text" placeholder="Optional" value={newPriceTagSKU} onChange={(e) => setNewPriceTagSKU(e.target.value)} />
-                                                <ModernInput label="Price (₹)" type="number" placeholder="0" value={newPriceTagPrice} onChange={(e) => setNewPriceTagPrice(e.target.value)} />
-                                                <div className="flex flex-col">
-                                                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 ml-1">Quantity (1-27)</label>
-                                                    <input type="number" min="1" max="27" value={newPriceTagQty} onChange={(e) => setNewPriceTagQty(e.target.value)} className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all text-sm font-medium text-slate-800 shadow-sm placeholder-slate-400" />
-                                                </div>
-                                                <button onClick={addPriceTagItem} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 rounded-xl shadow-md transition-all flex items-center justify-center gap-2">
-                                                    <Icons.Plus className="w-4 h-4" /> Add Item
-                                                </button>
-                                            </div>
-                                        </div>
-
-                                        {/* Items List */}
-                                        <div>
-                                            <h3 className="text-sm font-bold text-slate-600 uppercase tracking-wider mb-3">Items to Print</h3>
-                                            <div className="space-y-2 max-h-96 overflow-y-auto">
-                                                {priceTagItems.length === 0 ? (
-                                                    <p className="text-xs text-slate-400 italic text-center py-4">No items added yet</p>
-                                                ) : (
-                                                    priceTagItems.map(item => (
-                                                        <div key={item.id} className="bg-slate-50 p-3 rounded-lg border border-slate-200 flex items-start justify-between gap-3 group hover:bg-slate-100 transition-colors">
-                                                            <div className="flex-1 min-w-0">
-                                                                <p className="font-bold text-sm text-slate-800 truncate">{item.product}</p>
-                                                                <p className="text-xs text-slate-500">₹{item.price} {item.sku && `• ${item.sku}`}</p>
-                                                                <p className="text-xs text-indigo-600 font-semibold">Qty: {item.qty}</p>
-                                                            </div>
-                                                            <button onClick={() => deletePriceTag(item.id)} className="text-slate-400 hover:text-red-600 hover:bg-red-50 p-1 rounded transition-colors opacity-0 group-hover:opacity-100">
-                                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
-                                                            </button>
-                                                        </div>
-                                                    ))
-                                                )}
-                                            </div>
-                                        </div>
-
-                                        {priceTagItems.length > 0 && (
-                                            <div className="pt-4 border-t border-slate-100">
-                                                <button onClick={() => { window.print(); }} className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-4 rounded-xl shadow-md transition-all flex items-center justify-center gap-2">
-                                                    <Icons.Print className="w-4 h-4" /> Print Price Tags
-                                                </button>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {/* Right Panel - Preview A4 Sheet */}
-                                    <div className="lg:col-span-2 flex justify-center bg-slate-50 p-4 md:p-6 rounded-3xl border border-slate-200 print-section print:overflow-visible print:h-auto print:block print:p-0 print:bg-white print:border-none">
-                                        {priceTagItems.length === 0 ? (
-                                            <div className="flex items-center justify-center h-96 text-center">
-                                                <div>
-                                                    <p className="text-slate-400 font-bold">No items to display</p>
-                                                    <p className="text-slate-300 text-sm mt-1">Add items to generate price tags</p>
-                                                </div>
-                                            </div>
-                                        ) : (
-                                            <div style={{ width: '210mm', minHeight: '297mm', background: 'white', padding: '10mm', boxSizing: 'border-box', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8mm', alignContent: 'start' }} className="print:page print:shadow-none print:border-none print:rounded-none">
-                                                {priceTagItems.flatMap(item => 
-                                                    Array(item.qty).fill(null).map((_, idx) => (
-                                                        <div 
-                                                            key={`${item.id}-${idx}`}
-                                                            style={{
-                                                                width: '63mm',
-                                                                height: '73mm',
-                                                                border: '1.5px solid #1a1a1a',
-                                                                borderRadius: '2px',
-                                                                padding: '4mm',
-                                                                boxSizing: 'border-box',
-                                                                display: 'flex',
-                                                                flexDirection: 'column',
-                                                                justifyContent: 'space-between',
-                                                                background: '#ffffff',
-                                                                pageBreakInside: 'avoid',
-                                                                breakInside: 'avoid',
-                                                                fontSize: '12px',
-                                                                fontFamily: 'Arial, sans-serif'
-                                                            }}
-                                                            className="print:page print:shadow-none"
-                                                        >
-                                                            {/* Top - QR Code */}
-                                                            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', marginBottom: '3mm', minHeight: '45px' }}>
-                                                                <div id={`qr-label-${item.id}-${idx}`} style={{ width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}></div>
-                                                            </div>
-
-                                                            {/* Product Name & SKU */}
-                                                            <div style={{ textAlign: 'center', marginBottom: '2mm' }}>
-                                                                <h3 style={{ fontWeight: 'bold', fontSize: '11px', margin: '0', color: '#000000', textTransform: 'uppercase', wordBreak: 'break-word', lineHeight: '1.2' }}>
-                                                                    {item.product}
-                                                                </h3>
-                                                                {item.sku && (
-                                                                    <p style={{ fontSize: '8px', color: '#333333', margin: '1px 0 0 0', fontFamily: 'monospace' }}>
-                                                                        {item.sku}
-                                                                    </p>
-                                                                )}
-                                                            </div>
-
-                                                            {/* Price Section */}
-                                                            <div style={{ textAlign: 'center', marginBottom: '2mm' }}>
-                                                                <p style={{ fontSize: '24px', fontWeight: 'bold', color: '#000000', margin: '0' }}>
-                                                                    ₹{item.price}
-                                                                </p>
-                                                            </div>
-
-                                                            {/* Store Name */}
-                                                            <div style={{ textAlign: 'center', paddingTop: '2mm', borderTop: '1px solid #000000', fontSize: '7px', color: '#000000', fontWeight: 'bold' }}>
-                                                                {storeName}
-                                                            </div>
-                                                        </div>
-                                                    ))
-                                                )}
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
                         )}
 
                         {/* -------------------- TAB: SCANNER -------------------- */}
