@@ -16,23 +16,18 @@ A modern, feature-rich billing and inventory management application for fashion 
 
 ## Quick Start
 
-### Option 1: Use Online (Recommended)
-Visit: `https://yourusername.github.io/billing` (after deploying)
+Requires Node.js 22.13 or newer.
 
-### Option 2: Local Server
 ```bash
-# Install dependencies
-npm install -g http-server
-
-# Start server
-http-server -p 8000
-
-# Open browser
-# http://127.0.0.1:8000
+npm install
+npm start
 ```
 
-### Option 3: Direct File
-Simply double-click `index.html` to open in your browser.
+Open `http://127.0.0.1:8000`. The server creates `data/lookstylo.sqlite` automatically. Do not open the HTML files directly if you want database persistence.
+
+### Move Existing Browser Data
+
+If you previously opened the app as a local file or on GitHub Pages, open its **Settings** and choose **Download Backup** before switching. Start the backend, open `http://127.0.0.1:8000`, then use **Restore Data** in Settings. Backups include all browser storage keys, including barcode printer state.
 
 ## Login Credentials
 
@@ -98,14 +93,9 @@ Fill in the Meta values in `.env`, then set **Settings -> Integrations -> WhatsA
 
 ## Data Storage
 
-All data is stored locally in your browser using localStorage:
-- Invoices and transactions
-- Customer information
-- Product inventory
-- Expense records
-- Scan history
+The Express backend stores every app and barcode page browser-storage key in SQLite at `data/lookstylo.sqlite`. The database is excluded from Git. Browser storage remains as an offline fallback and is synchronized when the app is served by the backend.
 
-**Backup your data regularly!** Use the Settings tab to export your database.
+The backend binds to `127.0.0.1` by default and is intended for this computer only. GitHub Pages is static hosting and cannot provide this database backend; remote or multi-user hosting needs a secured server deployment and persistent database.
 
 ## Technology Stack
 
@@ -113,7 +103,8 @@ All data is stored locally in your browser using localStorage:
 - **Styling:** Tailwind CSS
 - **Barcodes:** JsBarcode
 - **QR Codes:** QRCode.js
-- **Storage:** Browser localStorage
+- **Backend:** Node.js, Express, and SQLite (`node:sqlite`)
+- **Storage:** SQLite persistence with browser localStorage fallback
 
 ## Browser Support
 

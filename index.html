@@ -127,6 +127,7 @@
         });
     </script>
 
+    <script src="storage-sync.js"></script>
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
@@ -622,6 +623,10 @@
             // ✨ BACKUP & RESTORE DATA EXPORT/IMPORT
             const exportData = () => {
                 const backupData = {
+                    storageEntries: Object.fromEntries(Array.from({ length: localStorage.length }, (_, index) => {
+                        const key = localStorage.key(index);
+                        return [key, localStorage.getItem(key)];
+                    })),
                     savedBills: parseStorageJson(localStorage.getItem('savedBills'), []),
                     inventory: parseStorageJson(localStorage.getItem('lookstylo_inv_v2') || localStorage.getItem('inventory'), []),
                     shopExpenses: parseStorageJson(localStorage.getItem('shopExpenses'), []),
@@ -648,13 +653,18 @@
                 const file = e.target.files[0];
                 if (!file) return;
                 const reader = new FileReader();
-                reader.onload = (event) => {
+                reader.onload = async (event) => {
                     try {
                         const data = JSON.parse(event.target.result);
                         const saveObject = (key, rawValue) => {
                             const value = stringifyIfNeeded(rawValue);
                             if (value !== null) localStorage.setItem(key, value);
                         };
+                        if (data.storageEntries && typeof data.storageEntries === 'object' && !Array.isArray(data.storageEntries)) {
+                            Object.entries(data.storageEntries).forEach(([key, value]) => {
+                                if (typeof value === 'string') localStorage.setItem(key, value);
+                            });
+                        }
                         if (data.savedBills) saveObject('savedBills', data.savedBills);
                         if (data.inventory) {
                             const invValue = typeof data.inventory === 'string' ? data.inventory : JSON.stringify(data.inventory);
@@ -678,6 +688,7 @@
                         if (data.invCategories) saveObject('lookstylo_categories', data.invCategories);
                         if (data.auth) saveObject('lookstylo_auth', data.auth);
                         
+                        await window.flushStorageSync();
                         alert("Data imported successfully! The app will now reload to apply your data.");
                         window.location.reload();
                     } catch(err) {
@@ -3645,7 +3656,7 @@ const stringifyIfNeeded = (value) => {
                     
 
         const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
+        window.storageReady.then(() => root.render(<App />));
     </script>
 </body>
 </html>

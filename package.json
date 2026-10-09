@@ -19,9 +19,12 @@
   "author": "Shariff Enterprises",
   "license": "MIT",
   "scripts": {
-    "start": "http-server -p 8000",
-    "serve": "npx http-server -p 8000",
+    "start": "node server.js",
+    "serve": "node server.js",
     "whatsapp-server": "node whatsapp-server.js"
+  },
+  "engines": {
+    "node": ">=22.13.0"
   },
   "devDependencies": {
     "http-server": "^14.1.1"

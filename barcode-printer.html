@@ -179,8 +179,7 @@
             <header class="bg-white border-b border-slate-200 h-16 px-6 flex items-center justify-between shrink-0 shadow-sm">
                 <div class="flex items-center gap-4">
                     <h2 id="current-page-title" class="text-xl font-bold text-slate-800 tracking-tight">Barcode Print</h2>
-                    <span class="text-xs bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-full font-medium border border-indigo-100">50mm × 25mm (2 Labels/Row)</span>
-                        <span id="active-label-layout" class="text-xs bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-full font-medium border border-indigo-100">50 × 25mm (1 Label/Row)</span>
+                    <span id="active-label-layout" class="text-xs bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-full font-medium border border-indigo-100">50 × 25mm (2 Labels/Row)</span>
                 </div>
                 <div class="flex items-center gap-3">
                     <a href="index.html" class="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg border border-slate-200 transition-all flex items-center gap-2">
@@ -727,6 +726,7 @@
     <!-- Hidden Print Container for @media print execution -->
     <div id="print-container" class="hidden"></div>
 
+    <script src="storage-sync.js"></script>
     <script>
         let appState = {
             businessName: "LOOKSTLYO CLOTHING",
@@ -734,7 +734,7 @@
             phone: "+91 98765 43210",
             gstin: "33AAAAA0000A1Z5",
             printer: "Label Printer",
-            labelSize: "50x25-1",
+            labelSize: "50x25-2",
             fields: {
                 business: true,
                 barcode: true,
@@ -770,7 +770,15 @@
             if (saved) {
                 try {
                     const parsed = JSON.parse(saved);
-                    appState = { ...appState, ...parsed };
+                    const migratedLabelSize = parsed && parsed.labelSize === '50x25-1' ? '50x25-2' : parsed?.labelSize;
+                    const normalized = {
+                        ...parsed,
+                        labelSize: migratedLabelSize || '50x25-2'
+                    };
+                    appState = { ...appState, ...normalized };
+                    if (parsed && parsed.labelSize !== normalized.labelSize) {
+                        persistState();
+                    }
                 } catch (e) {
                     console.error("Failed to parse saved state", e);
                 }
@@ -781,7 +789,8 @@
             localStorage.setItem('lookstylo_printer_state_v4', JSON.stringify(appState));
         }
 
-        window.onload = function() {
+        window.onload = async function() {
+            await window.storageReady;
             loadPersistedState();
             syncUIFromState();
             switchTab('barcode-print');

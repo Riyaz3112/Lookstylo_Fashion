@@ -1,5 +1,7 @@
 # GitHub Deployment Guide
 
+> The app now needs its Node.js backend for SQLite persistence. GitHub Pages can host only the static frontend and will not provide the database. For local use, run `npm install` and `npm start`, then open `http://127.0.0.1:8000`. The backend binds to loopback intentionally; do not expose it publicly without authentication and a production database setup.
+
 ## Step-by-Step Instructions
 
 ### 1. Create a GitHub Account & Repository
@@ -61,7 +63,7 @@ git push -u origin main
 
 Replace `YOUR_USERNAME` with your actual GitHub username.
 
-### 5. Enable GitHub Pages
+### 5. Optional: Enable GitHub Pages for a Static Frontend
 
 1. Go to your GitHub repository
 2. Click **Settings** (top right)
@@ -73,14 +75,16 @@ Replace `YOUR_USERNAME` with your actual GitHub username.
 
 GitHub will show you the URL where your app is hosted (usually in 1-2 minutes).
 
-### 6. Access Your App
+### 6. Access the Static Frontend
 
 Your app will be available at:
 ```
 https://YOUR_USERNAME.github.io/billing
 ```
 
-Or with custom domain (optional):
+This URL does not connect to the local SQLite backend. Use the Node.js server URL for persistent data. For a custom domain with persistence, deploy the backend separately with authentication and durable storage.
+
+For static frontend preview only, a custom domain can be used:
 ```
 https://yourdomain.com
 ```
