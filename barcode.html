@@ -40,24 +40,33 @@
         ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
         @media print {
+            body {
+                display: block !important;
+                height: auto !important;
+                overflow: visible !important;
+            }
             body * { visibility: hidden; }
             #print-container, #print-container * { visibility: visible; }
+            #app { display: none !important; }
             #print-container {
-                display: block !important;
-                position: fixed;
-                left: 0;
-                top: 0;
+                display: flex !important;
+                flex-direction: column !important;
+                position: static !important;
                 width: 101.6mm;
+                max-width: 101.6mm;
+                min-width: 101.6mm;
+                height: auto !important;
                 margin: 0;
                 padding: 0;
                 background: white;
-                z-index: 999999;
+                z-index: auto !important;
+                overflow: visible !important;
             }
-            #print-container.single-label-layout .thermal-row {
+            #print-container .thermal-row {
                 break-after: page;
                 page-break-after: always;
             }
-            #print-container.single-label-layout .thermal-row:last-child {
+            #print-container .thermal-row:last-child {
                 break-after: auto;
                 page-break-after: auto;
             }
@@ -1203,42 +1212,60 @@
             const d = appState.designer;
             const uniqueId = 'bc_' + Math.random().toString(36).substr(2, 9) + '_' + Math.floor(Math.random() * 1000);
 
-            const barcodeHeight = isPreview ? Math.min(d.barcodeHeight, 26) : d.barcodeHeight;
+            const barcodeHeight = Math.min(d.barcodeHeight, isPreview ? 26 : 34);
+            const salePrice = Number(item.sellingPrice).toLocaleString('en-IN', { maximumFractionDigits: 2 });
+            const mrp = Number(item.mrp).toLocaleString('en-IN', { maximumFractionDigits: 2 });
+            const businessInitials = String(appState.businessName || '')
+                .split(/\s+/)
+                .filter(Boolean)
+                .slice(0, 2)
+                .map(word => word[0])
+                .join('')
+                .toUpperCase() || 'LS';
 
-            let html = `<div class="thermal-label" style="text-align: ${d.textAlign}; font-family: monospace; width: 50mm; min-width: 50mm; height: 25mm; min-height: 25mm; box-sizing: border-box; padding: 1mm 1.5mm; display: flex; flex-direction: column; justify-content: space-between; align-items: center; overflow: hidden; position: relative; background: #ffffff;">`;
-            
-            if (f.business) {
-                html += `<div style="font-size: ${Math.max(7, d.fontBusiness - (isPreview ? 2 : 0))}px; font-weight: 700; line-height: 1; color: #0f172a; text-transform: lowercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%; max-width: 100%;">${appState.businessName}</div>`;
+            let html = `<div class="thermal-label" style="text-align: ${d.textAlign}; font-family: Arial, Helvetica, sans-serif; width: 50mm; min-width: 50mm; height: 25mm; min-height: 25mm; box-sizing: border-box; padding: 0.8mm 1mm; display: flex; flex-direction: column; justify-content: space-between; align-items: center; gap: 0.4mm; overflow: hidden; position: relative; background: #ffffff; color: #111827; border: 0.2mm solid #111827; border-radius: 0.8mm;">`;
+
+            if (f.business || f.sellingPrice || f.mrp) {
+                html += `<div style="width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 2px; min-height: 10px; padding-bottom: 0.5mm; border-bottom: 0.2mm solid #d1d5db;">`;
+                if (f.business) {
+                    html += `<div style="flex: 1; min-width: 0; display: flex; align-items: center; gap: 1mm;">`;
+                    html += `<span style="flex: 0 0 auto; width: 4mm; height: 4mm; display: flex; justify-content: center; align-items: center; border-radius: 0.5mm; background: #111827; color: #ffffff; font-size: 6px; font-weight: 800; line-height: 1;">${businessInitials}</span>`;
+                    html += `<span style="min-width: 0; font-size: ${Math.max(6, d.fontBusiness - (isPreview ? 2 : 0))}px; font-weight: 700; line-height: 1; color: #374151; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${appState.businessName}</span>`;
+                    html += `</div>`;
+                }
+                if (f.sellingPrice || f.mrp) {
+                    html += `<div style="flex: 0 0 auto; padding: 0.4mm 0.8mm; border: 0.2mm solid #111827; border-radius: 0.5mm; text-align: right; line-height: 1.05; white-space: nowrap;">`;
+                    if (f.mrp) {
+                        html += `<div style="font-size: 6px; color: #6b7280; text-decoration: line-through;">MRP ₹${mrp}</div>`;
+                    }
+                    if (f.sellingPrice) {
+                        html += `<div><span style="font-size: 5px; font-weight: 700; color: #6b7280;">PRICE </span><span style="font-size: ${Math.max(7, d.fontPrice - (isPreview ? 1 : 0))}px; font-weight: 800; color: #111827;">₹${salePrice}</span></div>`;
+                    }
+                    html += `</div>`;
+                }
+                html += `</div>`;
+            }
+
+            if (f.itemName) {
+                const extraInfo = [];
+                if (f.size && item.size) extraInfo.push(item.size);
+                if (f.colour && item.colour) extraInfo.push(item.colour);
+                html += `<div style="width: 100%; min-width: 0; line-height: 1.05;">`;
+                html += `<div style="font-size: ${Math.max(6, d.fontItem - (isPreview ? 2 : 0))}px; font-weight: 700; color: #111827; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${item.name}</div>`;
+                if (extraInfo.length > 0) {
+                    html += `<div style="margin-top: 1px; font-size: 6px; font-weight: 500; color: #6b7280; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${extraInfo.join(' | ')}</div>`;
+                }
+                html += `</div>`;
             }
 
             if (f.barcode) {
-                html += `<div style="display: flex; justify-content: center; align-items: center; width: 100%; max-width: 100%; min-width: 0; max-height: ${barcodeHeight}px; overflow: hidden; margin: 0px 0;">`;
-                html += `<svg id="${uniqueId}" style="display: block; max-height: ${barcodeHeight}px; max-width: 100%; width: 90%;"></svg>`;
+                html += `<div style="flex: 1; min-height: 0; display: flex; justify-content: center; align-items: center; width: 100%; max-width: 100%; overflow: hidden;">`;
+                html += `<svg id="${uniqueId}" style="display: block; max-height: ${barcodeHeight}px; max-width: 100%; width: 92%;"></svg>`;
                 html += `</div>`;
             }
 
             if (f.barcodeNumber) {
-                html += `<div style="font-size: ${Math.max(6, d.fontCode - (isPreview ? 1 : 0))}px; font-family: monospace; font-weight: 700; line-height: 1; color: #334155; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${item.barcode}</div>`;
-            }
-
-            if (f.itemName) {
-                let extraInfo = [];
-                if (f.size && item.size) extraInfo.push(item.size);
-                if (f.colour && item.colour) extraInfo.push(item.colour);
-                const subtitle = extraInfo.length > 0 ? ` (${extraInfo.join(', ')})` : '';
-                html += `<div style="font-size: ${Math.max(6, d.fontItem - (isPreview ? 2 : 0))}px; font-weight: 700; line-height: 1.1; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%; max-width: 100%;">${item.name}${subtitle}</div>`;
-            }
-
-            if (f.sellingPrice) {
-                const salePrice = Number(item.sellingPrice).toLocaleString('en-IN', { maximumFractionDigits: 2 });
-                html += `<div style="font-size: ${Math.max(6, d.fontPrice - (isPreview ? 1 : 0))}px; font-weight: 700; line-height: 1; color: #0f172a; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Sale Price: ${salePrice}</div>`;
-            }
-
-            if (f.mrp) {
-                const discount = item.mrp > 0
-                    ? Math.max(0, Math.round(((item.mrp - item.sellingPrice) / item.mrp) * 100))
-                    : 0;
-                html += `<div style="font-size: ${Math.max(6, d.fontPrice - (isPreview ? 1 : 0))}px; font-weight: 700; line-height: 1; color: #0f172a; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Discount: ${discount}%</div>`;
+                html += `<div style="width: 100%; padding-top: 0.4mm; border-top: 0.2mm solid #d1d5db; font-size: ${Math.max(6, d.fontCode - (isPreview ? 1 : 0))}px; font-family: Arial, Helvetica, sans-serif; font-weight: 600; line-height: 1; color: #374151; text-align: center; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${item.barcode}</div>`;
             }
 
             html += `</div>`;
@@ -1261,31 +1288,25 @@
                 return;
             }
 
-            const res1 = generateSingleLabelHTML(item, true);
-            const res2 = generateSingleLabelHTML(item, true);
+            const layout = getLabelLayout();
+            const labelHtml = Array.from({ length: layout.labelsPerRow }, () => generateSingleLabelHTML(item, true));
 
             stage.innerHTML = `
-                <div style="width: 101.6mm; height: 25mm; display: flex; gap: 1.6mm; background: white;">
-                    ${res1.html}
-                    ${res2.html}
+                <div style="width: ${layout.rowWidth}mm; height: ${layout.rowHeight}mm; display: flex; gap: ${layout.gap}mm; background: white;">
+                    ${labelHtml.map(result => result.html).join('')}
                 </div>
             `;
 
             setTimeout(() => {
                 try {
-                    JsBarcode(`#${res1.uniqueId}`, res1.barcode, {
-                        format: "CODE128",
-                        displayValue: false,
-                        margin: 0,
-                        width: 1.1,
-                        height: Math.min(appState.designer.barcodeHeight, 26)
-                    });
-                    JsBarcode(`#${res2.uniqueId}`, res2.barcode, {
-                        format: "CODE128",
-                        displayValue: false,
-                        margin: 0,
-                        width: 1.1,
-                        height: Math.min(appState.designer.barcodeHeight, 26)
+                    labelHtml.forEach((result) => {
+                        JsBarcode(`#${result.uniqueId}`, result.barcode, {
+                            format: "CODE128",
+                            displayValue: false,
+                            margin: 0,
+                            width: 1.1,
+                            height: Math.min(appState.designer.barcodeHeight, layout.labelHeight)
+                        });
                     });
                 } catch (e) {
                     console.error("Barcode preview render error", e);
@@ -1381,13 +1402,19 @@
         }
 
         function getLabelLayout() {
-            const singleLabel = appState.labelSize === '50x25-1';
+            const layoutMap = {
+                '50x25-2': { labelWidth: 50, labelHeight: 25, labelsPerRow: 2, rowWidth: 101.6, gap: 1.6, description: '50 × 25mm (2 Labels/Row)' },
+                '50x25-1': { labelWidth: 50, labelHeight: 25, labelsPerRow: 1, rowWidth: 50, gap: 0, description: '50 × 25mm (1 Label/Row)' },
+                '38x25-2': { labelWidth: 38, labelHeight: 25, labelsPerRow: 2, rowWidth: 77.6, gap: 1.6, description: '38 × 25mm (2 Labels/Row)' },
+                '100x50-1': { labelWidth: 100, labelHeight: 50, labelsPerRow: 1, rowWidth: 100, gap: 0, description: '100 × 50mm (1 Label/Row)' },
+                'custom': { labelWidth: 50, labelHeight: 25, labelsPerRow: 2, rowWidth: 101.6, gap: 1.6, description: 'Custom Label Size' }
+            };
+
+            const layout = layoutMap[appState.labelSize] || layoutMap['50x25-2'];
             return {
-                singleLabel,
-                labelsPerRow: singleLabel ? 1 : 2,
-                rowWidth: singleLabel ? 50 : 101.6,
-                gap: singleLabel ? 0 : 1.6,
-                description: singleLabel ? '50 × 25mm (1 Label/Row)' : '50 × 25mm (2 Labels/Row)'
+                ...layout,
+                singleLabel: layout.labelsPerRow === 1,
+                rowHeight: layout.labelHeight
             };
         }
 
@@ -1405,8 +1432,8 @@
             if (dashboardPrinter) dashboardPrinter.innerText = appState.printer;
             if (dashboardFormat) dashboardFormat.innerText = layout.description;
             if (previewHeading) previewHeading.innerText = layout.singleLabel
-                ? 'Physical Roll Preview (50mm Row)'
-                : 'Physical Roll Preview (101.6mm Row, 1.6mm Center Gap)';
+                ? `Physical Roll Preview (${layout.rowWidth}mm Row)`
+                : `Physical Roll Preview (${layout.rowWidth}mm Row, ${layout.gap}mm Center Gap)`;
         }
 
         function preparePrintLayout(container) {
@@ -1747,6 +1774,7 @@ Casual Polo Tee,SKU-PL03,8902001003,899,699,M,Olive,10`;
             const size = document.getElementById('setting-label-size').value;
             appState.labelSize = size;
             updateLabelLayoutUI();
+            updateLivePreview();
             persistState();
         }
 
