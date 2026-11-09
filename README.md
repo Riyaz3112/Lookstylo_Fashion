@@ -41,6 +41,10 @@ If you previously opened the app as a local file or on GitHub Pages, open its **
 
 ### Billing Tab
 - Create new invoices with customer details
+- Automatically assign readable customer membership IDs (for example, `LSF-NOV-09-01`) and show them on printed and WhatsApp e-Bill invoices, with a Google review link
+- Match inventory items by scanned or entered barcode/SKU and deduct stock when invoices are fully paid
+- Automatically save the invoice immediately when a payment amount is entered
+- Set an optional percentage discount for each item; invoice-level discounts apply after item discounts
 - Add items with quantity and rate
 - Apply discounts and manage payments
 - Print invoices or send via WhatsApp
@@ -48,6 +52,7 @@ If you previously opened the app as a local file or on GitHub Pages, open its **
 
 ### Inventory Tab
 - Manage product stock
+- Configure low-stock alerts (default: 2 units)
 - Update item prices
 - Track inventory levels
 
@@ -59,8 +64,12 @@ If you previously opened the app as a local file or on GitHub Pages, open its **
 ### Reports Tab
 - View financial summaries
 - Sales analytics by period
+- Track daily sales on a seven-day graph and filter invoices by day, date range, or the last two days
 - Payment collection reports
 - Expense breakdowns
+
+### Customers Tab
+- View and search unique month/day/sequence membership IDs for existing and new customers
 
 ### Label Creator
 - Generate shipping labels with barcodes

@@ -138,6 +138,7 @@
             if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
             return 'id-' + Math.random().toString(36).substr(2, 9) + '-' + Date.now();
         };
+        const GOOGLE_REVIEW_URL = 'https://g.page/r/CYYvcLcuUkztECk/review';
 
         const compressImage = (file, maxWidth = 800, quality = 0.7) => {
             return new Promise((resolve) => {
@@ -725,6 +726,12 @@
                 } catch(e) { console.error(e); }
                 return [];
             });
+            const [lowStockThreshold, setLowStockThreshold] = useState(() => {
+                const storedThreshold = localStorage.getItem('lookstylo_low_stock_threshold');
+                if (storedThreshold === null) return 2;
+                const savedThreshold = Number(storedThreshold);
+                return Number.isInteger(savedThreshold) && savedThreshold >= 0 ? savedThreshold : 2;
+            });
 
             const [isInvModalOpen, setIsInvModalOpen] = useState(false);
             const [invSearch, setInvSearch] = useState('');
@@ -792,6 +799,12 @@
                 } catch (e) {
                     showNotification("⚠️ Storage Full! Clear some old images or data to add more.");
                 }
+            };
+
+            const updateLowStockThreshold = (value) => {
+                const threshold = Math.max(0, Math.floor(Number(value) || 0));
+                setLowStockThreshold(threshold);
+                localStorage.setItem('lookstylo_low_stock_threshold', String(threshold));
             };
 
             const deleteInventoryItem = (id, name) => {
@@ -921,7 +934,65 @@
                 setPaymentModal(bill); setEditCash(bill.cash || 0); setEditGpay(bill.gpay || 0); setEditAdvance(bill.advance || 0);
             };
 
-            const subTotal = billItems.reduce((acc, item) => acc + ((item.qty || 0) * (item.rate || 0)), 0);
+            const syncInventoryForBill = (bill) => {
+                const desiredDeductions = new Map();
+                if (Number(bill.balance) <= 0) {
+                    (bill.items || []).forEach(line => {
+                        const inventoryItem = inventory.find(item =>
+                            item.id === line.inventoryItemId ||
+                            (line.inventorySku && String(item.sku || '').trim().toUpperCase() === String(line.inventorySku).trim().toUpperCase())
+                        );
+                        const quantity = Math.max(0, Number(line.qty) || 0);
+                        if (inventoryItem && quantity > 0) {
+                            desiredDeductions.set(inventoryItem.id, (desiredDeductions.get(inventoryItem.id) || 0) + quantity);
+                        }
+                    });
+                }
+
+                const previousDeductions = new Map(
+                    (bill.stockDeductionItems || []).map(entry => [entry.inventoryItemId, Number(entry.quantity) || 0])
+                );
+                let stockChanged = false;
+                let updatedInventory = inventory;
+                const lowStockItems = [];
+
+                if (desiredDeductions.size || previousDeductions.size) {
+                    updatedInventory = inventory.map(item => {
+                        const previousQuantity = previousDeductions.get(item.id) || 0;
+                        const desiredQuantity = desiredDeductions.get(item.id) || 0;
+                        const stock = (Number(item.stock) || 0) + previousQuantity - desiredQuantity;
+                        if (stock === Number(item.stock)) return item;
+                        stockChanged = true;
+                        const updatedItem = { ...item, stock };
+                        if (stock <= lowStockThreshold) lowStockItems.push(updatedItem);
+                        return updatedItem;
+                    });
+                }
+
+                if (stockChanged) {
+                    localStorage.setItem('lookstylo_inv_v2', JSON.stringify(updatedInventory));
+                    setInventory(updatedInventory);
+                }
+
+                return {
+                    bill: {
+                        ...bill,
+                        stockProcessed: Number(bill.balance) <= 0,
+                        stockDeductionItems: [...desiredDeductions].map(([inventoryItemId, quantity]) => ({ inventoryItemId, quantity }))
+                    },
+                    stockChanged,
+                    lowStockItems
+                };
+            };
+
+            const originalSubTotal = billItems.reduce((acc, item) => acc + ((Number(item.qty) || 0) * (Number(item.rate) || 0)), 0);
+            const itemDiscountAmount = billItems.reduce((acc, item) => {
+                const originalRate = Number(item.rate) || 0;
+                const discountPercent = Math.min(100, Math.max(0, Number(item.discountPercent) || 0));
+                const discountedRate = originalRate * (1 - discountPercent / 100);
+                return acc + ((Number(item.qty) || 0) * (originalRate - discountedRate));
+            }, 0);
+            const subTotal = originalSubTotal - itemDiscountAmount;
             const discountAmount = subTotal * ((Number(billDiscount) || 0) / 100);
             const totalAfterDiscount = subTotal - discountAmount;
             const gpayGstAmount = paymentMode !== 'Cash' ? (Number(paidGpay) || 0) * 0.05 : 0;
@@ -947,7 +1018,27 @@
                 return cleaned; // fallback: whatever digits present
             };
 
-            // One-time migration: normalize existing localStorage.customers keys
+            const createCustomerMembershipId = (customerMap, dateValue = todayStr, reservedIds = new Set()) => {
+                const validDate = /^\d{4}-\d{2}-\d{2}$/.test(String(dateValue || '')) ? String(dateValue) : todayStr;
+                const date = new Date(`${validDate}T00:00:00`);
+                const month = date.toLocaleString('en-US', { month: 'short' }).toUpperCase();
+                const day = String(date.getDate()).padStart(2, '0');
+                const prefix = `LSF-${month}-${day}-`;
+                const usedIds = new Set([
+                    ...Object.values(customerMap || {}).map(customer => customer?.membershipId).filter(Boolean),
+                    ...reservedIds
+                ]);
+                let sequence = 1;
+                while (usedIds.has(`${prefix}${String(sequence).padStart(2, '0')}`)) sequence += 1;
+                return `${prefix}${String(sequence).padStart(2, '0')}`;
+            };
+
+            const getCustomerFirstPurchaseDate = phoneKey => savedBills
+                .filter(bill => normalizePhoneKey(bill.phone) === phoneKey && /^\d{4}-\d{2}-\d{2}$/.test(String(bill.date || '')))
+                .map(bill => bill.date)
+                .sort()[0] || todayStr;
+
+            // Migrate customer phone keys and membership IDs to their current formats.
             useEffect(() => {
                 try {
                     const raw = JSON.parse(localStorage.getItem('customers') || '{}');
@@ -961,16 +1052,34 @@
                         const address = entry.address || '';
                         const dob = entry.dob || '';
                         if (!migrated[nk]) {
-                            migrated[nk] = { name, address, dob, points };
+                            migrated[nk] = { ...entry, name, address, dob, points };
                         } else {
                             migrated[nk].points = Number(migrated[nk].points || 0) + points;
                             if (!migrated[nk].name && name) migrated[nk].name = name;
                             if (!migrated[nk].address && address) migrated[nk].address = address;
                             if (!migrated[nk].dob && dob) migrated[nk].dob = dob;
+                            if (!migrated[nk].membershipId && entry.membershipId) migrated[nk].membershipId = entry.membershipId;
                         }
                         if (nk !== k) changed = true;
                     });
-                    Object.keys(migrated).forEach(k => { if (typeof migrated[k].points === 'undefined') migrated[k].points = 0; });
+                    const usedMembershipIds = new Set();
+                    const membershipIdPattern = /^LSF-[A-Z]{3}-\d{2}-\d{2,}$/;
+                    Object.keys(migrated)
+                        .sort((first, second) => getCustomerFirstPurchaseDate(first).localeCompare(getCustomerFirstPurchaseDate(second)) || first.localeCompare(second))
+                        .forEach(k => {
+                            if (typeof migrated[k].points === 'undefined') {
+                                migrated[k].points = 0;
+                                changed = true;
+                            }
+                            const membershipId = String(migrated[k].membershipId || '').trim();
+                            if (!membershipIdPattern.test(membershipId) || usedMembershipIds.has(membershipId)) {
+                                migrated[k].membershipId = createCustomerMembershipId(migrated, getCustomerFirstPurchaseDate(k), usedMembershipIds);
+                                changed = true;
+                            } else {
+                                migrated[k].membershipId = membershipId;
+                            }
+                            usedMembershipIds.add(migrated[k].membershipId);
+                        });
                     if (changed) {
                         localStorage.setItem('customers', JSON.stringify(migrated));
                         setCustomers(migrated);
@@ -1060,8 +1169,9 @@
                 if (!phone) return showNotification("Please enter customer phone number.");
                 const whatsappApiUrl = (localStorage.getItem('whatsappApiUrl') || '').trim();
                 const totalPaidAndAdvance = Number(paidCash) + Number(paidGpay) + Number(advancePayment);
+                const customerMembershipId = customers[normalizePhoneKey(billCustomerPhone)]?.membershipId;
                 
-                let msg = `🎉 Thank you for shopping with LookStylo Fashion!\n\nWe truly appreciate your support. ❤️\n\n*Your e-Bill Summary:*\nInvoice: ${billInvoice}\nDate: ${billDate.split('-').reverse().join('-')}\nTotal Amount: ₹ ${grandTotal}\nPaid Amount: ₹ ${totalPaidAndAdvance}\nPending Balance: ₹ ${balanceAmount}\n\n`;
+                let msg = `🎉 Thank you for shopping with LookStylo Fashion!\n\nWe truly appreciate your support. ❤️\n\n*Your e-Bill Summary:*\nInvoice: ${billInvoice}\nDate: ${billDate.split('-').reverse().join('-')}\n${customerMembershipId ? `Membership ID: ${customerMembershipId}\n` : ''}Total Amount: ₹ ${grandTotal}\nPaid Amount: ₹ ${totalPaidAndAdvance}\nPending Balance: ₹ ${balanceAmount}\n\n`;
                 
                 if (balanceAmount > 0) {
                     const qrData = `upi://pay?pa=9360232991@okbizaxis&pn=LOOKSTYLO FASHION&am=${balanceAmount}&cu=INR`;
@@ -1069,7 +1179,7 @@
                     msg += `👇 *Click link to view Payment QR Code:*\n${qrLink}\n\n*Or use UPI ID:* 9360232991@okbizaxis\n\n`;
                 }
                 
-                msg += `📸 Follow us on Instagram for the latest arrivals, exclusive offers & fashion updates:\nhttps://www.instagram.com/lookstylo_menswear?igsh=MWs4amhoazR5YTg5NQ==\n\n💬 Join our WhatsApp Group to get instant updates on new collections, discounts & giveaways:\nhttps://chat.whatsapp.com/IjvWkTNYwv8De8u9p4kfyv\n\n⭐ We'd love to hear about your experience! Please leave us a Google review:\nhttps://share.google/YggYHlZgmJw3xvRmG\n\nThank you for choosing LookStylo Fashion. We look forward to serving you again! 😊`;
+                msg += `📸 Follow us on Instagram for the latest arrivals, exclusive offers & fashion updates:\nhttps://www.instagram.com/lookstylo_menswear?igsh=MWs4amhoazR5YTg5NQ==\n\n💬 Join our WhatsApp Group to get instant updates on new collections, discounts & giveaways:\nhttps://chat.whatsapp.com/IjvWkTNYwv8De8u9p4kfyv\n\n⭐ We'd love to hear about your experience! Please leave us a Google review:\n${GOOGLE_REVIEW_URL}\n\nThank you for choosing LookStylo Fashion. We look forward to serving you again! 😊`;
 
                 const billElement = document.getElementById('bill-preview');
                 if (!billElement || !window.jspdf || !window.jspdf.jsPDF) {
@@ -1117,6 +1227,7 @@
                     pdf.setFontSize(9);
                     writePair('Name:', billCustomerName || 'Walk-in Customer');
                     writePair('Phone:', billCustomerPhone || 'Not provided');
+                    if (customerMembershipId) writePair('Member ID:', customerMembershipId);
                     writePair('Delivery:', billDelivery || 'Store Walk-in');
                     if (billCustomerAddress) {
                         writePair('Address:', billCustomerAddress);
@@ -1132,21 +1243,31 @@
                     y += 7;
                     pdf.setFont('helvetica', 'normal');
                     billItems.forEach((item, index) => {
-                        const itemTotal = (Number(item.qty) || 0) * (Number(item.rate) || 0);
+                        const originalRate = Number(item.rate) || 0;
+                        const discountPercent = Math.min(100, Math.max(0, Number(item.discountPercent) || 0));
+                        const discountedRate = originalRate * (1 - discountPercent / 100);
+                        const itemTotal = (Number(item.qty) || 0) * discountedRate;
                         const itemName = pdf.splitTextToSize(String(item.particular || '-'), 60)[0];
                         pdf.text(String(index + 1), columns[0], y);
                         pdf.text(itemName, columns[1], y);
                         pdf.text(String(item.hsn || '-'), columns[2], y, { align: 'right' });
                         pdf.text(String(item.qty || 0), columns[3], y, { align: 'right' });
-                        pdf.text((Number(item.rate) || 0).toFixed(2), columns[4], y, { align: 'right' });
+                        pdf.text(originalRate.toFixed(2), columns[4], y, { align: 'right' });
+                        if (discountPercent > 0) {
+                            pdf.setFontSize(7);
+                            pdf.text(`-${discountPercent}%`, columns[4], y + 3, { align: 'right' });
+                            pdf.setFontSize(9);
+                        }
                         pdf.text(itemTotal.toFixed(2), columns[5], y, { align: 'right' });
                         pdf.line(margin, y + 2, right, y + 2);
-                        y += 7;
+                        y += discountPercent > 0 ? 9 : 7;
                     });
                     y += 5;
 
                     const totals = [
-                        ['Sub Total:', subTotal.toFixed(2)],
+                        [itemDiscountAmount > 0 ? 'Original Sub Total:' : 'Sub Total:', originalSubTotal.toFixed(2)],
+                        ...(itemDiscountAmount > 0 ? [['Item Discount:', `- ${itemDiscountAmount.toFixed(2)}`]] : []),
+                        ...(itemDiscountAmount > 0 ? [['Sub Total after Item Discount:', subTotal.toFixed(2)]] : []),
                         ...(billDiscount > 0 ? [[`Discount (${billDiscount}%):`, `- ${discountAmount.toFixed(2)}`]] : []),
                         ...(gpayGstAmount > 0 ? [['GST (5% - GPay):', gpayGstAmount.toFixed(2)]] : []),
                         ['Grand Total:', grandTotal.toFixed(2)],
@@ -1171,7 +1292,8 @@
                     }
                     pdf.setFontSize(8);
                     pdf.setTextColor(100, 100, 100);
-                    pdf.text('Thank you for your shopping. Visit again', pageWidth / 2, 202, { align: 'center' });
+                    pdf.text('Thank you for your shopping. Visit again', pageWidth / 2, 195, { align: 'center' });
+                    pdf.textWithLink('Google Review: g.page/r/CYYvcLcuUkztECk/review', margin, 201, { url: GOOGLE_REVIEW_URL });
                     const pdfBlob = pdf.output('blob');
 
                     const fileName = `Lookstylo_${billInvoice}.pdf`;
@@ -1240,31 +1362,32 @@
 
             const handleUpdatePayment = () => {
                 let newlyCleared = false;
-                let updatedBillDetails = null;
-
-                setSavedBills(prev => {
-                    const updated = prev.map(b => {
-                        if (b.id === paymentModal.id) {
-                            const newCash = Number(editCash) || 0;
-                            const newGpay = Number(editGpay) || 0;
-                            const newAdvance = Number(editAdvance) || 0;
-                            const newBalance = b.total - newCash - newGpay - newAdvance;
-
-                            if (b.balance > 0 && newBalance <= 0) {
-                                newlyCleared = true;
-                            }
-
-                            const newBill = { ...b, cash: newCash, gpay: newGpay, advance: newAdvance, balance: newBalance };
-                            updatedBillDetails = newBill;
-                            return newBill;
-                        }
-                        return b;
-                    });
-                    localStorage.setItem('savedBills', JSON.stringify(updated));
-                    return updated;
+                const currentBill = savedBills.find(bill => bill.id === paymentModal.id);
+                if (!currentBill) {
+                    showNotification('Unable to find this invoice. Refresh the page and try again.');
+                    setPaymentModal(null);
+                    return;
+                }
+                const newCash = Number(editCash) || 0;
+                const newGpay = Number(editGpay) || 0;
+                const newAdvance = Number(editAdvance) || 0;
+                const newBalance = currentBill.total - newCash - newGpay - newAdvance;
+                newlyCleared = currentBill.balance > 0 && newBalance <= 0;
+                const stockSync = syncInventoryForBill({
+                    ...currentBill,
+                    cash: newCash,
+                    gpay: newGpay,
+                    advance: newAdvance,
+                    balance: newBalance
                 });
+                const updatedBillDetails = stockSync.bill;
+                const updatedBills = savedBills.map(bill => bill.id === paymentModal.id ? updatedBillDetails : bill);
+                localStorage.setItem('savedBills', JSON.stringify(updatedBills));
+                setSavedBills(updatedBills);
                 
-                showNotification("Payment updated successfully!");
+                showNotification(stockSync.stockChanged && stockSync.lowStockItems.length
+                    ? `Payment updated. Low stock: ${stockSync.lowStockItems.map(item => `${item.name} (${item.stock})`).join(', ')}`
+                    : stockSync.stockChanged ? 'Payment updated and inventory stock adjusted.' : 'Payment updated successfully!');
                 setPaymentModal(null);
 
                 if (newlyCleared && updatedBillDetails && updatedBillDetails.phone) {
@@ -1279,6 +1402,14 @@
             const deleteBill = (id) => {
                 if(window.confirm("Are you sure you want to delete this bill?")) {
                     const deletedBill = savedBills.find(bill => bill.id === id);
+                    if (deletedBill?.stockDeductionItems?.length) {
+                        const restoredInventory = inventory.map(item => {
+                            const deduction = deletedBill.stockDeductionItems.find(entry => entry.inventoryItemId === item.id);
+                            return deduction ? { ...item, stock: (Number(item.stock) || 0) + (Number(deduction.quantity) || 0) } : item;
+                        });
+                        localStorage.setItem('lookstylo_inv_v2', JSON.stringify(restoredInventory));
+                        setInventory(restoredInventory);
+                    }
                     setSavedBills(prev => {
                         const updated = prev.filter(b => b.id !== id);
                         localStorage.setItem('savedBills', JSON.stringify(updated));
@@ -1333,6 +1464,7 @@
                             ...previous,
                             [phoneKey]: {
                                 ...existing,
+                                membershipId: existing.membershipId || createCustomerMembershipId(previous, getCustomerFirstPurchaseDate(phoneKey)),
                                 name: billCustomerName || existing.name || '',
                                 address: billCustomerAddress || existing.address || '',
                                 dob: billCustomerDob
@@ -1410,15 +1542,15 @@
                 const val = e.target.value;
                 setBillCustomerPhone(val);
                 const nk = normalizePhoneKey(val);
-                setBillCustomerDob(customers[nk]?.dob || '');
-                if (nk && customers[nk]) {
-                    if (!billCustomerName) setBillCustomerName(customers[nk].name || '');
-                    if (!billCustomerAddress) setBillCustomerAddress(customers[nk].address || '');
-                    setAvailablePoints(customers[nk].points || 0);
-                    // reset redeem toggle when changing customer
+                if (nk.length === 12 && nk.startsWith('91')) {
+                    const customer = customers[nk];
+                    setBillCustomerName(customer?.name || '');
+                    setBillCustomerDob(customer?.dob || '');
+                    setBillCustomerAddress(customer?.address || '');
+                    setAvailablePoints(Number(customer?.points) || 0);
                     setRedeem1000(false);
                 }
-            }
+            };
 
             const [scanResult, setScanResult] = useState(null);
             const [awaitingTrackingFor, _setAwaitingTrackingFor] = useState(null);
@@ -1481,6 +1613,15 @@
                 if (target.records.some(record => record[target.idKey] === entry.data[target.idKey])) {
                     showNotification('An item with this ID already exists.');
                     return;
+                }
+
+                if (entry.type === 'bill' && entry.data.stockDeductionItems?.length) {
+                    const restoredInventory = inventory.map(item => {
+                        const deduction = entry.data.stockDeductionItems.find(record => record.inventoryItemId === item.id);
+                        return deduction ? { ...item, stock: (Number(item.stock) || 0) - (Number(deduction.quantity) || 0) } : item;
+                    });
+                    localStorage.setItem('lookstylo_inv_v2', JSON.stringify(restoredInventory));
+                    setInventory(restoredInventory);
                 }
 
                 const restoredRecords = [entry.data, ...target.records];
@@ -1710,14 +1851,23 @@
                 const hasBillItems = billItems.some(item => String(item.particular || '').trim() && Number(item.qty) > 0);
                 const hasPayment = Number(paidCash) > 0 || Number(paidGpay) > 0 || Number(advancePayment) > 0;
                 if (!hasBillItems && !hasPayment) return false;
-                const newBill = {
+                const existingBill = savedBills.find(bill => bill.id === billInvoice);
+                const stockSync = syncInventoryForBill({
                     id: billInvoice, date: billDate, type: billType, customer: billCustomerName || 'Walk-in',
                     phone: billCustomerPhone, dob: billCustomerDob, address: billCustomerAddress, delivery: billDelivery,
                     courier: billCourier, tracking: billTracking, discount: billDiscount, promoCode: billPromoCode,
                     items: billItems, total: grandTotal, cash: Number(paidCash) || 0, gpay: Number(paidGpay) || 0,
                     advance: Number(advancePayment) || 0, balance: balanceAmount, description: billDescription,
-                    billToName: billName || '', redeemed: redeem1000 || false
-                };
+                    billToName: billName || '', redeemed: redeem1000 || false,
+                    stockProcessed: existingBill?.stockProcessed || false,
+                    stockDeductionItems: existingBill?.stockDeductionItems || []
+                });
+                const newBill = stockSync.bill;
+                if (stockSync.stockChanged) {
+                    showNotification(stockSync.lowStockItems.length
+                        ? `Stock updated. Low stock: ${stockSync.lowStockItems.map(item => `${item.name} (${item.stock})`).join(', ')}`
+                        : 'Inventory stock updated for paid invoice.');
+                }
 
                 setSavedBills(prevBills => {
                     const existingIndex = prevBills.findIndex(b => b.id === billInvoice);
@@ -1737,7 +1887,14 @@
                         const redeemed = redeemedFlag && (pointsBefore >= 1000);
                         const pointsAfter = Math.max(0, pointsBefore - (redeemed ? 1000 : 0) + (pointsEarned || 0));
 
-                        const updatedEntry = { ...existing, name: billCustomerName, address: billCustomerAddress, dob: billCustomerDob, points: pointsAfter };
+                        const updatedEntry = {
+                            ...existing,
+                            membershipId: existing.membershipId || createCustomerMembershipId(prev, getCustomerFirstPurchaseDate(phoneKey)),
+                            name: billCustomerName,
+                            address: billCustomerAddress,
+                            dob: billCustomerDob,
+                            points: pointsAfter
+                        };
                         const updated = { ...prev, [phoneKey]: updatedEntry };
                         localStorage.setItem('customers', JSON.stringify(updated));
                         setAvailablePoints(pointsAfter);
@@ -1788,6 +1945,12 @@
                 }, 1000); 
                 return () => clearTimeout(timer);
             }, [billInvoice, billDate, billType, billCustomerName, billCustomerPhone, billCustomerAddress, billDelivery, billCourier, billTracking, billDiscount, billPromoCode, billItems, grandTotal, paidCash, paidGpay, advancePayment, balanceAmount, totalQty, billDescription]);
+
+            useEffect(() => {
+                if (Number(paidCash) > 0 || Number(paidGpay) > 0 || Number(advancePayment) > 0) {
+                    saveCurrentBill({ applyLoyalty: false });
+                }
+            }, [paidCash, paidGpay, advancePayment, billInvoice]);
 
             const handleNewBill = () => {
                 saveCurrentBill();
@@ -1862,13 +2025,20 @@ const stringifyIfNeeded = (value) => {
                         if (field === 'particular') {
                             const normalizedValue = String(value || '').trim().toUpperCase();
                             const foundItem = inventory.find(inv =>
-                                [inv.name, inv.sku, inv.barcode].some(candidate => String(candidate || '').trim().toUpperCase() === normalizedValue)
+                                [inv.sku, inv.barcode].some(candidate => String(candidate || '').trim().toUpperCase() === normalizedValue)
                             );
                             
                             if (foundItem) {
                                 updated.particular = foundItem.name; 
                                 updated.rate = foundItem.price;
+                                updated.discountPercent = '';
                                 if (foundItem.hsn) updated.hsn = foundItem.hsn;
+                                updated.inventoryItemId = foundItem.id;
+                                updated.inventorySku = foundItem.sku;
+                            } else {
+                                updated.discountPercent = '';
+                                delete updated.inventoryItemId;
+                                delete updated.inventorySku;
                             }
                         }
                         return updated;
@@ -1922,7 +2092,7 @@ const stringifyIfNeeded = (value) => {
                             if (!isActive) return;
                             const code = String(decodedText || '').trim().toUpperCase();
                             const foundItem = inventory.find(inv =>
-                                [inv.name, inv.sku, inv.barcode].some(value => String(value || '').trim().toUpperCase() === code)
+                                [inv.sku, inv.barcode].some(value => String(value || '').trim().toUpperCase() === code)
                             );
 
                             if (!foundItem) {
@@ -1930,7 +2100,7 @@ const stringifyIfNeeded = (value) => {
                                 return;
                             }
 
-                            updateBillItem(barcodeScanItemId, 'particular', foundItem.name);
+                            updateBillItem(barcodeScanItemId, 'particular', foundItem.sku || foundItem.barcode);
                             setBarcodeScanItemId(null);
                         };
                         let lastCameraError = null;
@@ -1997,26 +2167,50 @@ const stringifyIfNeeded = (value) => {
                     return [currentYear, currentYear + 1].some(year => getBirthdayReminderDate(customer.dob, year) === todayStr);
                 })
                 .map(([phone, customer]) => ({ ...customer, phone }));
+            const customerPurchases = savedBills.reduce((purchases, bill) => {
+                const phoneKey = normalizePhoneKey(bill.phone);
+                const total = Number(bill.total) || 0;
+                if (!phoneKey || total <= 0 || String(bill.id) === String(billInvoice)) return purchases;
+                if (!purchases[phoneKey]) purchases[phoneKey] = { count: 0, total: 0, bills: [] };
+                purchases[phoneKey].count += 1;
+                purchases[phoneKey].total += total;
+                purchases[phoneKey].bills.push(bill);
+                return purchases;
+            }, {});
+            const currentCustomerPhoneKey = normalizePhoneKey(billCustomerPhone);
+            const currentCustomerMembershipId = customers[currentCustomerPhoneKey]?.membershipId || '';
+            const currentCustomerPurchases = (customerPurchases[currentCustomerPhoneKey]?.bills || [])
+                .sort((first, second) => String(second.date || '').localeCompare(String(first.date || '')));
+            const currentCustomerPurchaseTotal = currentCustomerPurchases.reduce((total, bill) => total + (Number(bill.total) || 0), 0);
             const customerDirectory = Object.entries(customers)
                 .map(([phone, customer]) => {
                     const digits = String(phone).replace(/\D/g, '');
                     const displayPhone = digits.length === 12 && digits.startsWith('91') ? `+91 ${digits.slice(2)}` : digits;
-                    return { phone, displayPhone, name: customer?.name || '', dob: customer?.dob || '' };
+                    const purchases = customerPurchases[normalizePhoneKey(phone)] || { count: 0, total: 0 };
+                    return { phone, displayPhone, membershipId: customer?.membershipId || '', name: customer?.name || '', dob: customer?.dob || '', purchaseCount: purchases.count, purchaseTotal: purchases.total };
                 })
-                .filter(customer => `${customer.name} ${customer.phone} ${customer.displayPhone} ${customer.dob}`.toLowerCase().includes(customerSearch.trim().toLowerCase()))
+                .filter(customer => `${customer.membershipId} ${customer.name} ${customer.phone} ${customer.displayPhone} ${customer.dob}`.toLowerCase().includes(customerSearch.trim().toLowerCase()))
                 .sort((first, second) => first.name.localeCompare(second.name));
             const [reportType, setReportType] = useState('all'); 
             const [reportDate, setReportDate] = useState(todayStr);
+            const [reportStartDate, setReportStartDate] = useState(todayStr);
+            const [reportEndDate, setReportEndDate] = useState(todayStr);
             const [reportMonth, setReportMonth] = useState(currentMonthStr);
             const [reportYear, setReportYear] = useState(currentYearStr);
             const [reportFilter, setReportFilter] = useState('All'); 
             const effectiveReportType = isStaffLogin ? 'daily' : reportType;
             const effectiveReportDate = isStaffLogin ? todayStr : reportDate;
+            const yesterdayDate = new Date();
+            yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+            const yesterdayStr = `${yesterdayDate.getFullYear()}-${String(yesterdayDate.getMonth() + 1).padStart(2, '0')}-${String(yesterdayDate.getDate()).padStart(2, '0')}`;
 
             const baseReportBills = savedBills.filter(b => {
                 if (!b.date) return false;
                 if (effectiveReportType === 'all') return true;
                 if (effectiveReportType === 'daily') return b.date === effectiveReportDate;
+                if (effectiveReportType === 'last1') return b.date === todayStr;
+                if (effectiveReportType === 'last2') return b.date === todayStr || b.date === yesterdayStr;
+                if (effectiveReportType === 'range') return reportStartDate && reportEndDate && b.date >= reportStartDate && b.date <= reportEndDate;
                 if (effectiveReportType === 'monthly') return b.date.startsWith(reportMonth);
                 if (effectiveReportType === 'yearly') return b.date.startsWith(reportYear);
                 return false;
@@ -2027,6 +2221,9 @@ const stringifyIfNeeded = (value) => {
             const reportExpenses = expenses.filter(e => {
                 if (!e.date) return false;
                 if (effectiveReportType === 'daily') return e.date === effectiveReportDate;
+                if (effectiveReportType === 'last1') return e.date === todayStr;
+                if (effectiveReportType === 'last2') return e.date === todayStr || e.date === yesterdayStr;
+                if (effectiveReportType === 'range') return reportStartDate && reportEndDate && e.date >= reportStartDate && e.date <= reportEndDate;
                 if (effectiveReportType === 'monthly') return e.date.startsWith(reportMonth);
                 if (effectiveReportType === 'yearly') return e.date.startsWith(reportYear);
                 return false;
@@ -2041,10 +2238,28 @@ const stringifyIfNeeded = (value) => {
             
             let periodLabel = '';
             if (effectiveReportType === 'daily') { periodLabel = new Date(effectiveReportDate).toLocaleDateString('en-GB'); } 
+            else if (effectiveReportType === 'last1') { periodLabel = `Today (${new Date(`${todayStr}T00:00:00`).toLocaleDateString('en-GB')})`; }
+            else if (effectiveReportType === 'last2') { periodLabel = 'Today and yesterday'; }
+            else if (effectiveReportType === 'range') {
+                const formatRangeDate = value => value ? new Date(`${value}T00:00:00`).toLocaleDateString('en-GB') : 'Not set';
+                periodLabel = `${formatRangeDate(reportStartDate)} – ${formatRangeDate(reportEndDate)}`;
+            }
             else if (effectiveReportType === 'monthly') {
                 const [y, m] = reportMonth.split('-');
                 periodLabel = new Date(y, m - 1).toLocaleString('en-US', { month: 'long', year: 'numeric' });
             } else { periodLabel = reportYear; }
+
+            const salesTrend = [...Array(7)].map((_, index) => {
+                const date = new Date();
+                date.setHours(0, 0, 0, 0);
+                date.setDate(date.getDate() - (6 - index));
+                const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+                const sales = savedBills
+                    .filter(bill => bill.date === dateKey)
+                    .reduce((total, bill) => total + (Number(bill.total) || 0), 0);
+                return { dateKey, label: date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }), sales };
+            });
+            const maxTrendSales = Math.max(...salesTrend.map(day => day.sales), 1);
 
             const exportCustomerData = () => {
                 if (baseReportBills.length === 0) { showNotification("No customer data available for this period!"); return; }
@@ -2147,6 +2362,7 @@ const stringifyIfNeeded = (value) => {
                             <div className="text-[9px] leading-[1.5] text-gray-800">
                                 <div className="font-bold uppercase text-gray-900 mb-1">Name: <span className="font-normal">{billCustomerName || 'Walk-in Customer'}</span></div>
                                 <div className="font-bold uppercase text-gray-900 mb-1">Phone: <span className="font-normal">{billCustomerPhone || 'Not provided'}</span></div>
+                                {customers[normalizePhoneKey(billCustomerPhone)]?.membershipId && <div className="font-bold uppercase text-gray-900 mb-1">Membership ID: <span className="font-normal">{customers[normalizePhoneKey(billCustomerPhone)].membershipId}</span></div>}
                                 <div className="font-bold uppercase text-gray-900 mb-1">Del: <span className="font-normal">{billDelivery || 'Store Walk-in'}</span></div>
                                 {billDelivery === 'Courier' && billCustomerAddress && (
                                     <div className="font-bold uppercase text-gray-900">Address: <span className="font-normal whitespace-pre-wrap">{billCustomerAddress}</span></div>
@@ -2172,14 +2388,20 @@ const stringifyIfNeeded = (value) => {
                                 </thead>
                                 <tbody>
                                     {billItems.map((item, index) => {
-                                        const itemTotal = (item.qty || 0) * (item.rate || 0);
+                                        const originalRate = Number(item.rate) || 0;
+                                        const discountPercent = Math.min(100, Math.max(0, Number(item.discountPercent) || 0));
+                                        const discountedRate = originalRate * (1 - discountPercent / 100);
+                                        const itemTotal = (Number(item.qty) || 0) * discountedRate;
                                         return (
                                             <tr key={item.id} className="border-b border-gray-200">
                                                 <td className="py-2 px-1 text-center border-r border-gray-300">{index + 1}</td>
                                                 <td className="py-2 px-2 border-r border-gray-300 uppercase">{item.particular}</td>
                                                 <td className="py-2 px-1 text-center border-r border-gray-300">{item.hsn || '-'}</td>
                                                 <td className="py-2 px-1 text-center border-r border-gray-300">{item.qty}</td>
-                                                <td className="py-2 px-1 text-right border-r border-gray-300">{item.rate ? parseFloat(item.rate).toFixed(2) : ''}</td>
+                                                <td className="py-2 px-1 text-right border-r border-gray-300">
+                                                    {originalRate ? originalRate.toFixed(2) : ''}
+                                                    {discountPercent > 0 && <div className="text-[8px] font-bold text-emerald-700">-{discountPercent}%</div>}
+                                                </td>
                                                 <td className="py-2 px-2 text-right">{itemTotal ? itemTotal.toFixed(2) : ''}</td>
                                             </tr>
                                         );
@@ -2203,7 +2425,9 @@ const stringifyIfNeeded = (value) => {
                                 <ul className="list-disc pl-3 space-y-0.5">{terms.map((t, i) => <li key={i}>{t}</li>)}</ul>
                             </div>
                             <div className="w-[42%] border border-gray-300 rounded p-2 bg-gray-50">
-                                <div className="flex justify-between py-1"><span className="font-semibold">Sub Total:</span><span>₹ {subTotal.toFixed(2)}</span></div>
+                                <div className="flex justify-between py-1"><span className="font-semibold">{itemDiscountAmount > 0 ? 'Original Sub Total:' : 'Sub Total:'}</span><span>₹ {originalSubTotal.toFixed(2)}</span></div>
+                                {itemDiscountAmount > 0 && <div className="flex justify-between py-1 text-emerald-700"><span>Item Discount:</span><span>- ₹ {itemDiscountAmount.toFixed(2)}</span></div>}
+                                {itemDiscountAmount > 0 && <div className="flex justify-between py-1"><span className="font-semibold">Sub Total after Item Discount:</span><span>₹ {subTotal.toFixed(2)}</span></div>}
                                 {billDiscount > 0 && <div className="flex justify-between py-1 text-gray-700"><span>Discount ({billDiscount}%):</span><span>- ₹ {discountAmount.toFixed(2)}</span></div>}
                                 {gpayGstAmount > 0 && <div className="flex justify-between py-1 text-gray-700"><span>GST (5% - GPay):</span><span>₹ {gpayGstAmount.toFixed(2)}</span></div>}
                                 {roundOffAmount !== 0 && <div className="flex justify-between py-1 text-gray-700"><span>Round Off:</span><span>{roundOffAmount > 0 ? '+ ' : '- '}₹ {Math.abs(roundOffAmount).toFixed(2)}</span></div>}
@@ -2219,6 +2443,9 @@ const stringifyIfNeeded = (value) => {
                         
                         <div className="mt-3 pt-2 border-t border-gray-300 text-center text-[8px] font-extrabold text-gray-500 tracking-widest uppercase shrink-0">
                             Thank you for your shopping. Visit again
+                            <div className="mt-1 normal-case tracking-normal">
+                                ⭐ <a href={GOOGLE_REVIEW_URL} target="_blank" rel="noopener noreferrer" className="underline">Leave us a Google review</a>
+                            </div>
                         </div>
 
                         {/* -------------------- TAB: CALCULATOR -------------------- */}
@@ -2665,6 +2892,11 @@ const stringifyIfNeeded = (value) => {
                                         <ModernInput label="Phone Number" type="text" value={billCustomerPhone} onChange={handlePhoneChange} placeholder="Enter Phone to Auto-Fill" className="md:col-span-1 border-slate-200 focus:border-indigo-500 font-mono" />
                                         <ModernInput label="Customer Name" type="text" value={billCustomerName} onChange={e=>setBillCustomerName(e.target.value)} placeholder="Walk-in Customer" className="md:col-span-2" />
                                         <ModernInput label="Customer Date of Birth" type="date" value={billCustomerDob} onChange={e=>setBillCustomerDob(e.target.value)} className="md:col-span-1" />
+                                        {currentCustomerMembershipId && (
+                                            <div className="md:col-span-3 rounded-xl border border-indigo-100 bg-indigo-50 px-4 py-3 text-sm font-bold text-slate-700">
+                                                Customer Membership ID: <span className="font-mono text-indigo-700">{currentCustomerMembershipId}</span>
+                                            </div>
+                                        )}
                                         
                                         <div className="md:col-span-3 flex items-center gap-4 mt-2">
                                             <div className="text-sm text-slate-700 font-bold">Loyalty Points: <span className="text-indigo-700">{availablePoints}</span></div>
@@ -2673,6 +2905,32 @@ const stringifyIfNeeded = (value) => {
                                                 <span className="text-slate-600">Redeem 1000 pts = 10% off</span>
                                             </label>
                                         </div>
+                                        {currentCustomerPhoneKey.length === 12 && currentCustomerPhoneKey.startsWith('91') && (customers[currentCustomerPhoneKey] || currentCustomerPurchases.length > 0) && (
+                                            <div className="md:col-span-3 rounded-2xl border border-indigo-100 bg-indigo-50/70 p-4">
+                                                <div className="flex flex-wrap items-center justify-between gap-3">
+                                                    <div>
+                                                        <h3 className="text-sm font-extrabold text-slate-900">Customer purchase history</h3>
+                                                        <p className="mt-1 text-xs font-medium text-slate-600">
+                                                            {currentCustomerPurchases.length} previous {currentCustomerPurchases.length === 1 ? 'purchase' : 'purchases'}
+                                                            {currentCustomerPurchases[0]?.date ? ` · Last visit ${new Date(`${currentCustomerPurchases[0].date}T00:00:00`).toLocaleDateString('en-IN')}` : ''}
+                                                        </p>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <div className="text-xs font-bold uppercase tracking-wide text-slate-500">Total spent</div>
+                                                        <div className="text-lg font-black text-indigo-700">₹{currentCustomerPurchaseTotal.toLocaleString('en-IN')}</div>
+                                                    </div>
+                                                </div>
+                                                {currentCustomerPurchases.length > 0 && (
+                                                    <div className="mt-3 flex flex-wrap gap-2">
+                                                        {currentCustomerPurchases.slice(0, 3).map(purchase => (
+                                                            <span key={purchase.id} className="rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-slate-600">
+                                                                {purchase.id} · {new Date(`${purchase.date}T00:00:00`).toLocaleDateString('en-IN')} · ₹{(Number(purchase.total) || 0).toLocaleString('en-IN')}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
                                     </div>
 
                                     <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200 space-y-5">
@@ -2716,23 +2974,37 @@ const stringifyIfNeeded = (value) => {
                                         </div>
                                         <div className="p-5 space-y-3 bg-white">
                                             <datalist id="preset-items">
-                                                {inventory.map(item => <option key={item.id} value={item.name}>{item.sku}</option>)}
+                                                {inventory.map(item => <option key={item.id} value={item.sku} label={item.name} />)}
                                             </datalist>
                                             {billItems.map((item, index) => (
-                                                <div key={item.id} className="flex gap-2 items-center group flex-wrap md:flex-nowrap">
-                                                    <div className="w-6 text-center text-xs font-bold text-slate-400">{index + 1}.</div>
-                                                    <div className="flex flex-grow gap-2 w-full md:w-auto min-w-0">
-                                                        <input list="preset-items" type="text" placeholder="Item Name or Barcode/SKU" value={item.particular} onChange={e=>updateBillItem(item.id, 'particular', e.target.value)} onKeyDown={e=>{if(e.key==='Enter')e.preventDefault();}} className="flex-grow min-w-0 p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm uppercase outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all w-full md:w-auto font-medium" />
+                                                <div key={item.id} className="grid grid-cols-12 gap-x-2 gap-y-2 items-center group">
+                                                    <div className="col-span-1 self-start pt-3 text-center text-xs font-bold text-slate-400">{index + 1}.</div>
+                                                    <div className="col-span-11 flex min-w-0 gap-2">
+                                                        <input list="preset-items" type="text" placeholder="Scan or enter product barcode/SKU" value={item.particular} onChange={e=>updateBillItem(item.id, 'particular', e.target.value)} onKeyDown={e=>{if(e.key==='Enter')e.preventDefault();}} className="w-0 min-w-0 flex-grow p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm uppercase outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-medium" />
                                                         <button type="button" onClick={() => openInvoiceBarcodeScanner(item.id)} className="shrink-0 p-3 bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 text-indigo-700 rounded-xl transition-colors" title="Scan item barcode" aria-label="Scan item barcode">
                                                             <Icons.Camera className="w-5 h-5" />
                                                         </button>
+                                                        <button type="button" onClick={()=>removeBillItem(item.id)} className={`shrink-0 text-slate-400 hover:text-red-500 hover:bg-red-50 p-2.5 rounded-xl transition-all border border-transparent hover:border-red-100 ${billItems.length === 1 ? 'invisible' : ''}`} title="Remove Row" aria-label={`Remove item ${index + 1}`}>
+                                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
+                                                        </button>
                                                     </div>
-                                                    <input type="text" placeholder="HSN" value={item.hsn || ''} onChange={e=>updateBillItem(item.id, 'hsn', e.target.value)} className="w-20 p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20 transition-all text-center font-semibold text-slate-700" />
-                                                    <input type="number" min="1" value={item.qty} placeholder="Qty" onWheel={(e) => e.target.blur()} onChange={e=>updateBillItem(item.id, 'qty', e.target.value)} className="w-16 p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20 transition-all text-center font-semibold text-slate-700" />
-                                                    <input type="number" min="0" value={item.rate} placeholder="Rate ₹" onWheel={(e) => e.target.blur()} onChange={e=>updateBillItem(item.id, 'rate', e.target.value)} className="w-24 p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20 transition-all text-right font-semibold text-slate-700" />
-                                                    <button onClick={()=>removeBillItem(item.id)} className={`text-slate-400 hover:text-red-500 hover:bg-red-50 p-2.5 rounded-xl transition-all border border-transparent hover:border-red-100 ${billItems.length === 1 ? 'invisible' : ''}`} title="Remove Row">
-                                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" /></svg>
-                                                    </button>
+                                                    <div className="col-span-11 col-start-2 grid min-w-0 grid-cols-12 gap-2">
+                                                        <input type="text" placeholder="HSN" value={item.hsn || ''} onChange={e=>updateBillItem(item.id, 'hsn', e.target.value)} className="col-span-6 md:col-span-3 w-full min-w-0 p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20 transition-all text-center font-semibold text-slate-700" />
+                                                        <input type="number" min="1" value={item.qty} placeholder="Qty" onWheel={(e) => e.target.blur()} onChange={e=>updateBillItem(item.id, 'qty', e.target.value)} className="col-span-6 md:col-span-2 w-full min-w-0 p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20 transition-all text-center font-semibold text-slate-700" />
+                                                        <input type="number" min="0" value={item.rate} placeholder="Rate ₹" onWheel={(e) => e.target.blur()} onChange={e=>updateBillItem(item.id, 'rate', e.target.value)} className="col-span-6 md:col-span-3 w-full min-w-0 p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20 transition-all text-right font-semibold text-slate-700" />
+                                                        <input type="number" min="0" max="100" step="0.01" value={item.discountPercent ?? ''} placeholder="Discount %" aria-label={`Discount percentage for item ${index + 1}`} title="Optional discount percentage for this item" onWheel={(e) => e.target.blur()} onChange={e=>updateBillItem(item.id, 'discountPercent', e.target.value)} className="col-span-6 md:col-span-4 w-full min-w-0 p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-sm outline-none focus:bg-white focus:ring-2 focus:ring-emerald-500/20 transition-all text-right font-semibold text-emerald-800 placeholder-emerald-700/60" />
+                                                    </div>
+                                                    {item.inventoryItemId && (() => {
+                                                        const linkedInventoryItem = inventory.find(product => product.id === item.inventoryItemId);
+                                                        if (!linkedInventoryItem) return null;
+                                                        const remaining = Number(linkedInventoryItem.stock) - (Number(item.qty) || 0);
+                                                        return (
+                                                            <p className={`col-span-12 pl-8 text-xs font-semibold ${remaining <= lowStockThreshold ? 'text-amber-700' : 'text-slate-500'}`}>
+                                                                In stock: {linkedInventoryItem.stock} · After payment: {remaining}
+                                                                {remaining <= lowStockThreshold ? ' · Low stock warning' : ''}
+                                                            </p>
+                                                        );
+                                                    })()}
                                                 </div>
                                             ))}
                                             <button onClick={addBillItem} className="mt-2 text-sm font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-5 py-3 rounded-xl transition-colors flex items-center gap-2 border border-indigo-100">
@@ -2964,6 +3236,21 @@ const stringifyIfNeeded = (value) => {
                                     </div>
                                 </div>
 
+                                <div className="mb-6 flex flex-col gap-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+                                    <div>
+                                        <h3 className="text-sm font-extrabold text-amber-900">Low-stock alerts</h3>
+                                        <p className="mt-1 text-xs font-medium text-amber-800">
+                                            {inventory.filter(item => Number(item.stock) <= lowStockThreshold).length} product(s) at or below {lowStockThreshold} units.
+                                            Stock is deducted after an invoice is fully paid.
+                                        </p>
+                                    </div>
+                                    <label className="flex items-center gap-2 text-xs font-bold text-amber-900">
+                                        Alert at or below
+                                        <input type="number" min="0" step="1" value={lowStockThreshold} onChange={e=>updateLowStockThreshold(e.target.value)} aria-label="Low stock threshold" className="w-20 rounded-lg border border-amber-300 bg-white p-2 text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-amber-500/20" />
+                                        units
+                                    </label>
+                                </div>
+
                                 <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-6">
                                     <div className="flex flex-1 w-full gap-3">
                                         <div className="relative flex-1 max-w-md">
@@ -3016,9 +3303,9 @@ const stringifyIfNeeded = (value) => {
                                                         </td>
                                                         <td className="p-4 text-center">
                                                             <span className={`inline-flex items-center justify-center px-3 py-1 rounded-full text-xs font-bold ${
-                                                                Number(item.stock) <= 0 ? 'bg-red-50 text-red-700 border border-red-200' : Number(item.stock) <= 5 ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                                                Number(item.stock) <= 0 ? 'bg-red-50 text-red-700 border border-red-200' : Number(item.stock) <= lowStockThreshold ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                                                             }`}>
-                                                                {item.stock} {Number(item.stock) <= 5 && '⚠️'}
+                                                                {item.stock} {Number(item.stock) <= lowStockThreshold && '⚠️'}
                                                             </span>
                                                         </td>
                                                         <td className="p-4 text-right">
@@ -3123,26 +3410,32 @@ const stringifyIfNeeded = (value) => {
                                         <h2 className="text-2xl font-black text-slate-900 tracking-tight">Customer Data</h2>
                                         <p className="mt-1 text-sm font-medium text-slate-500">{Object.keys(customers).length} customers · {Object.values(customers).filter(customer => customer?.dob).length} with date of birth</p>
                                     </div>
-                                    <input type="search" value={customerSearch} onChange={e=>setCustomerSearch(e.target.value)} placeholder="Search name, phone, or DOB" aria-label="Search customers" className="w-full sm:max-w-sm p-3 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-sm font-medium text-slate-800 shadow-sm" />
+                                    <input type="search" value={customerSearch} onChange={e=>setCustomerSearch(e.target.value)} placeholder="Search ID, name, phone, or DOB" aria-label="Search customers" className="w-full sm:max-w-sm p-3 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-sm font-medium text-slate-800 shadow-sm" />
                                 </div>
 
                                 <div className="overflow-x-auto border border-slate-200 rounded-xl">
-                                    <table className="w-full min-w-[560px] text-left border-collapse">
+                                    <table className="w-full min-w-[900px] text-left border-collapse">
                                         <thead className="bg-slate-50 border-b border-slate-200 text-xs uppercase tracking-wider text-slate-500">
                                             <tr>
+                                                <th className="p-4 font-bold">Membership ID</th>
                                                 <th className="p-4 font-bold">Name</th>
                                                 <th className="p-4 font-bold">Phone</th>
                                                 <th className="p-4 font-bold">Date of Birth</th>
+                                                <th className="p-4 font-bold text-right">Purchases</th>
+                                                <th className="p-4 font-bold text-right">Total Spent</th>
                                             </tr>
                                         </thead>
                                         <tbody className="bg-white divide-y divide-slate-100">
                                             {customerDirectory.length === 0 ? (
-                                                <tr><td colSpan="3" className="p-8 text-center text-sm font-medium text-slate-400">{Object.keys(customers).length ? 'No customers match this search.' : 'Customer profiles will appear here when a phone number is saved.'}</td></tr>
+                                                <tr><td colSpan="6" className="p-8 text-center text-sm font-medium text-slate-400">{Object.keys(customers).length ? 'No customers match this search.' : 'Customer profiles will appear here when a phone number is saved.'}</td></tr>
                                             ) : customerDirectory.map(customer => (
                                                 <tr key={customer.phone} className="hover:bg-slate-50">
+                                                    <td className="p-4 font-mono text-sm font-bold text-indigo-700">{customer.membershipId}</td>
                                                     <td className="p-4 font-semibold text-slate-900">{customer.name || 'Name not provided'}</td>
                                                     <td className="p-4 font-mono text-sm text-slate-700">{customer.displayPhone || customer.phone}</td>
                                                     <td className="p-4 text-sm text-slate-700">{customer.dob ? new Date(`${customer.dob}T00:00:00`).toLocaleDateString('en-IN') : <span className="text-slate-400">Not provided</span>}</td>
+                                                    <td className="p-4 text-right text-sm font-semibold text-slate-700">{customer.purchaseCount}</td>
+                                                    <td className="p-4 text-right text-sm font-bold text-slate-900">₹{customer.purchaseTotal.toLocaleString('en-IN')}</td>
                                                 </tr>
                                             ))}
                                         </tbody>
@@ -3174,11 +3467,26 @@ const stringifyIfNeeded = (value) => {
                                                 <>
                                                     <select value={reportType} onChange={e=>setReportType(e.target.value)} className="p-2.5 bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500/20 font-bold text-slate-800 cursor-pointer text-sm min-w-[100px]">
                                                         <option value="all">All Invoices</option>
+                                                        <option value="last1">Today</option>
+                                                        <option value="last2">Last 2 Days</option>
                                                         <option value="daily">Daily</option>
+                                                        <option value="range">Date Range</option>
                                                         <option value="monthly">Monthly</option>
                                                         <option value="yearly">Yearly</option>
                                                     </select>
                                                     {reportType === 'daily' && <input type="date" value={reportDate} onChange={e=>setReportDate(e.target.value)} className="p-2.5 bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500/20 font-bold text-slate-800 text-sm" />}
+                                                    {reportType === 'range' && (
+                                                        <>
+                                                            <label className="flex items-center gap-2 text-xs font-bold text-slate-600">
+                                                                From
+                                                                <input type="date" value={reportStartDate} max={reportEndDate || undefined} onChange={e=>setReportStartDate(e.target.value)} aria-label="Start date" className="p-2.5 bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500/20 font-bold text-slate-800 text-sm" />
+                                                            </label>
+                                                            <label className="flex items-center gap-2 text-xs font-bold text-slate-600">
+                                                                To
+                                                                <input type="date" value={reportEndDate} min={reportStartDate || undefined} onChange={e=>setReportEndDate(e.target.value)} aria-label="End date" className="p-2.5 bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500/20 font-bold text-slate-800 text-sm" />
+                                                            </label>
+                                                        </>
+                                                    )}
                                                     {reportType === 'monthly' && <input type="month" value={reportMonth} onChange={e=>setReportMonth(e.target.value)} className="p-2.5 bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500/20 font-bold text-slate-800 text-sm" />}
                                                     {reportType === 'yearly' && (
                                                         <select value={reportYear} onChange={e=>setReportYear(e.target.value)} className="p-2.5 bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500/20 font-bold text-slate-800 cursor-pointer text-sm">
@@ -3231,6 +3539,36 @@ const stringifyIfNeeded = (value) => {
                                         <span className="text-xl font-black text-red-800">₹ {totalReportExpenses.toLocaleString('en-IN', {minimumFractionDigits:2})}</span>
                                     </div>
                                 </div>
+
+                                <section className="mb-8 rounded-2xl border border-slate-200 bg-white p-5 md:p-6 print:hidden">
+                                    <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+                                        <div>
+                                            <h3 className="text-sm font-black uppercase tracking-wide text-slate-800">Sales Tracking · Last 7 Days</h3>
+                                            <p className="mt-1 text-xs font-medium text-slate-500">Daily billed sales, including today.</p>
+                                        </div>
+                                        <div className="rounded-xl bg-indigo-50 px-4 py-2 text-right">
+                                            <div className="text-[10px] font-bold uppercase tracking-wider text-indigo-500">7-day sales</div>
+                                            <div className="text-lg font-black text-indigo-800">₹{salesTrend.reduce((total, day) => total + day.sales, 0).toLocaleString('en-IN')}</div>
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-7 items-end gap-2 sm:gap-4" role="img" aria-label="Sales by day for the last seven days">
+                                        {salesTrend.map(day => (
+                                            <div key={day.dateKey} className="flex min-w-0 flex-col items-center gap-2">
+                                                <span className="max-w-full truncate text-center text-[10px] font-bold text-slate-600 sm:text-xs">
+                                                    {day.sales > 0 ? `₹${day.sales.toLocaleString('en-IN')}` : '₹0'}
+                                                </span>
+                                                <div className="flex h-32 w-full items-end rounded-lg bg-slate-50 p-1">
+                                                    <div
+                                                        className="w-full rounded-md bg-indigo-500 transition-all"
+                                                        style={{ height: `${day.sales > 0 ? Math.max((day.sales / maxTrendSales) * 100, 8) : 0}%` }}
+                                                        title={`${day.dateKey}: ₹${day.sales.toLocaleString('en-IN')}`}
+                                                    />
+                                                </div>
+                                                <span className="text-center text-[10px] font-semibold text-slate-500 sm:text-xs">{day.label}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </section>
 
                                 {birthdayOffersDueToday.length > 0 && (
                                     <section className="mb-8 rounded-2xl border border-rose-200 bg-rose-50 p-5 print:hidden">
