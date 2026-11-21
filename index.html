@@ -1281,7 +1281,6 @@
 
             const shareBillWhatsApp = async () => {
                 const phone = formatPhoneForWa(billCustomerPhone);
-                if (!phone) return showNotification("Please enter customer phone number.");
                 const whatsappApiUrl = (localStorage.getItem('whatsappApiUrl') || '').trim();
                 const totalPaidAndAdvance = Number(paidCash) + Number(paidGpay) + Number(advancePayment);
                 const customerMembershipId = customers[normalizePhoneKey(billCustomerPhone)]?.membershipId;
@@ -1297,13 +1296,19 @@
                 msg += `📸 Follow us on Instagram for the latest arrivals, exclusive offers & fashion updates:\nhttps://www.instagram.com/lookstylo_menswear?igsh=MWs4amhoazR5YTg5NQ==\n\n💬 Join our WhatsApp Group to get instant updates on new collections, discounts & giveaways:\nhttps://chat.whatsapp.com/IjvWkTNYwv8De8u9p4kfyv\n\n⭐ We'd love to hear about your experience! Please leave us a Google review:\n${GOOGLE_REVIEW_URL}\n\nThank you for choosing LookStylo Fashion. We look forward to serving you again! 😊`;
 
                 const billElement = document.getElementById('bill-preview');
-                if (!billElement || !window.jspdf || !window.jspdf.jsPDF) {
-                    openWhatsAppMsg(phone, msg);
-                    return showNotification('WhatsApp opened. PDF generator is unavailable.');
-                }
+                if (!billElement) return showNotification('Invoice preview is not available.');
 
                 try {
                     showNotification('Preparing e-Bill PDF...');
+                    if (!window.jspdf || !window.jspdf.jsPDF) {
+                        await new Promise((resolve, reject) => {
+                            const script = document.createElement('script');
+                            script.src = 'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js';
+                            script.onload = resolve;
+                            script.onerror = () => reject(new Error('PDF generator could not be loaded'));
+                            document.head.appendChild(script);
+                        });
+                    }
                     const JsPDF = window.jspdf && window.jspdf.jsPDF;
                     if (!JsPDF) throw new Error('PDF generator is unavailable');
 
@@ -1342,7 +1347,7 @@
 
                     pdf.setFont('helvetica', 'bold');
                     pdf.setFontSize(16);
-                    pdf.text(storeName.trim() || 'LOOKSTYLO FASHION', margin, y);
+                    pdf.text((storeName.trim() || 'LOOKSTYLO FASHION').toUpperCase(), margin, y);
                     pdf.setFontSize(9);
                     pdf.setFont('helvetica', 'normal');
                     pdf.text('No 18, Sacred Heart College Shopping Complex', margin, y + 5);
@@ -1367,8 +1372,8 @@
                     }
                     y += 2;
 
-                    const columns = [margin + 1, 20, 102, 113, 126, right];
-                    const headers = ['S.No', 'Particulars', 'HSN', 'Qty', 'Rate', 'Amount'];
+                    const columns = [margin + 1, 20, 88, 100, 114, 126, right];
+                    const headers = ['S.No', 'Particulars', 'HSN', 'Qty', 'Rate', 'Disc.', 'Amount'];
                     pdf.setFillColor(240, 240, 240);
                     pdf.rect(margin, y - 4, right - margin, 7, 'F');
                     pdf.setFont('helvetica', 'bold');
@@ -1387,11 +1392,11 @@
                         pdf.text(String(item.qty || 0), columns[3], y, { align: 'right' });
                         pdf.text(originalRate.toFixed(2), columns[4], y, { align: 'right' });
                         if (discountPercent > 0) {
-                            pdf.setFontSize(7);
-                            pdf.text(`-${discountPercent}%`, columns[4], y + 3, { align: 'right' });
+                            pdf.setFontSize(8);
+                            pdf.text(`-${discountPercent}%`, columns[5], y, { align: 'right' });
                             pdf.setFontSize(9);
                         }
-                        pdf.text(itemTotal.toFixed(2), columns[5], y, { align: 'right' });
+                        pdf.text(itemTotal.toFixed(2), columns[6], y, { align: 'right' });
                         pdf.line(margin, y + 2, right, y + 2);
                         y += discountPercent > 0 ? 9 : 7;
                     });
@@ -1404,14 +1409,15 @@
                         ...(billDiscount > 0 ? [[`Discount (${billDiscount}%):`, `- ${discountAmount.toFixed(2)}`]] : []),
                         ...(gpayGstAmount > 0 ? [['GST (5% - GPay):', gpayGstAmount.toFixed(2)]] : []),
                         ['Grand Total:', grandTotal.toFixed(2)],
+                        ...(advancePayment > 0 ? [['Advance Paid:', (Number(advancePayment) || 0).toFixed(2)]] : []),
                         ['Paid (GPay):', (Number(paidGpay) || 0).toFixed(2)],
                         ['Paid (Cash):', (Number(paidCash) || 0).toFixed(2)],
                         ['Balance:', balanceAmount.toFixed(2)]
                     ];
-                    pdf.setFontSize(10);
+                    pdf.setFontSize(8);
                     totals.forEach(([label, value]) => {
                         pdf.setFont('helvetica', 'bold');
-                        pdf.text(label, 88, y);
+                        pdf.text(label, 62, y);
                         pdf.setFont('helvetica', 'normal');
                         pdf.text(`Rs. ${value}`, right, y, { align: 'right' });
                         y += 5;
@@ -1436,42 +1442,42 @@
                     const pdfBlob = pdf.output('blob');
 
                     const fileName = `Lookstylo_${billInvoice}.pdf`;
-                    if (whatsappApiUrl) {
-                        showNotification('Sending e-Bill through WhatsApp Cloud API...');
-                        const pdfBase64 = await new Promise((resolve, reject) => {
+                    pdf.save(fileName);
+
+                    if (whatsappApiUrl && phone) {
+                        showNotification('e-Bill downloaded. Sending optional WhatsApp copy...');
+                        new Promise((resolve, reject) => {
                             const reader = new FileReader();
                             reader.onload = () => resolve(reader.result);
                             reader.onerror = () => reject(new Error('Unable to prepare PDF'));
                             reader.readAsDataURL(pdfBlob);
-                        });
-                        const apiResponse = await fetch(whatsappApiUrl, {
+                        }).then(pdfBase64 => fetch(whatsappApiUrl, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ phone, message: msg, fileName, pdfBase64 })
+                        }).then(async apiResponse => {
+                            const apiResult = await apiResponse.json().catch(() => ({}));
+                            if (apiResponse.ok && apiResult.sent) {
+                                showNotification('e-Bill downloaded and sent on WhatsApp.');
+                            }
+                        }).catch(apiError => {
+                            console.warn('Optional WhatsApp delivery failed:', apiError);
+                        })).catch(apiError => {
+                            console.warn('Unable to prepare optional WhatsApp PDF:', apiError);
                         });
-                        const apiResult = await apiResponse.json().catch(() => ({}));
-                        if (!apiResponse.ok || !apiResult.sent) {
-                            throw new Error(apiResult.error || 'WhatsApp Cloud API rejected the e-Bill');
-                        }
-                        showNotification('e-Bill sent directly to the customer on WhatsApp.');
-                        return;
                     }
 
-                    const downloadUrl = URL.createObjectURL(pdfBlob);
-                    const link = document.createElement('a');
-                    link.href = downloadUrl;
-                    link.download = fileName;
-                    document.body.appendChild(link);
-                    link.click();
-                    link.remove();
-                    URL.revokeObjectURL(downloadUrl);
-                    openWhatsAppMsg(phone, msg);
-                    showNotification('e-Bill downloaded. Customer WhatsApp chat is ready to send.');
+                    if (phone) {
+                        openWhatsAppMsg(phone, msg);
+                        showNotification('e-Bill downloaded. Customer WhatsApp chat is ready to send.');
+                    } else {
+                        showNotification('e-Bill downloaded. Add a valid customer phone to send it on WhatsApp.');
+                    }
                 } catch (error) {
                     if (error && error.name === 'AbortError') return;
                     console.error('e-Bill sharing failed:', error);
-                    openWhatsAppMsg(phone, msg);
-                    showNotification('PDF sharing failed. WhatsApp message opened.');
+                    if (phone) openWhatsAppMsg(phone, msg);
+                    showNotification('PDF download failed. Check the browser popup/download permissions.');
                 }
             };
 
@@ -2648,40 +2654,26 @@ const stringifyIfNeeded = (value) => {
                         {copyLabel && (<div className="absolute top-0 right-0 bg-gray-900 text-white text-[9px] px-2 py-0.5 font-bold uppercase">{copyLabel}</div>)}
                         
                         <div className="flex items-start justify-between border-b border-gray-300 pb-2 mb-2 shrink-0 gap-4">
-                            <div className="flex items-start gap-3 min-w-0">
-                                <div className="w-16 h-16 rounded-md border border-gray-300 bg-slate-50 overflow-hidden flex items-center justify-center shrink-0">
-                                    {logoUrl ? <img src={logoUrl} alt="Company Logo" className="max-w-full max-h-full object-contain" /> : <StoreLogo className="w-10 h-10 text-gray-900" />}
-                                </div>
-                                <div className="min-w-0">
-                                    <h1 className="text-[1.1rem] font-black tracking-[0.12em] text-gray-900 leading-none mb-1 uppercase break-words">{storeName.trim() || 'LOOKSTYLO FASHION'}</h1>
-                                    <p className="text-[9px] text-gray-700 leading-[1.3]">No 18, Sacred Heart College Shopping Complex</p>
-                                    <p className="text-[9px] text-gray-700 leading-[1.3]">Opposite Poorvika Vaniyambadi Main Road</p>
-                                    <p className="text-[9px] text-gray-700 leading-[1.3]">Tirupathur Dist - 635601</p>
-                                    <p className="text-[9px] text-gray-700 leading-[1.3]">Phone: 8680857511</p>
-                                    <p className="text-[9px] text-gray-700 leading-[1.3]">Instagram: @lookstylo_menswear</p>
-                                </div>
+                            <div className="min-w-0">
+                                <h1 className="text-[1.1rem] font-black tracking-[0.08em] text-gray-900 leading-none mb-1 uppercase break-words">{storeName.trim() || 'LOOKSTYLO FASHION'}</h1>
+                                <p className="text-[9px] text-gray-700 leading-[1.3]">No 18, Sacred Heart College Shopping Complex</p>
+                                <p className="text-[9px] text-gray-700 leading-[1.3]">Tirupathur Dist - 635601 | Phone: 8680857511</p>
                             </div>
-                            <div className="text-right min-w-[170px] pt-3">
-                                <p className="uppercase tracking-[0.25em] text-[8px] font-bold text-gray-600">Invoice</p>
+                            <div className="text-right min-w-[170px]">
+                                <p className="uppercase tracking-[0.25em] text-[9px] font-bold text-gray-700">INVOICE</p>
                                 <p className="text-[0.95rem] font-black text-gray-900 mt-1">{billInvoice}</p>
                                 <p className="text-[9px] text-gray-700 mt-1">Date: {billDate ? billDate.split('-').reverse().join('-') : ''}</p>
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-[1.2fr_0.8fr] gap-4 mb-2 pt-1 pb-2 border-b border-gray-300 shrink-0">
-                            <div className="text-[9px] leading-[1.5] text-gray-800">
-                                <div className="font-bold uppercase text-gray-900 mb-1">Name: <span className="font-normal">{billCustomerName || 'Walk-in Customer'}</span></div>
-                                <div className="font-bold uppercase text-gray-900 mb-1">Phone: <span className="font-normal">{billCustomerPhone || 'Not provided'}</span></div>
-                                {customers[normalizePhoneKey(billCustomerPhone)]?.membershipId && <div className="font-bold uppercase text-gray-900 mb-1">Membership ID: <span className="font-normal">{customers[normalizePhoneKey(billCustomerPhone)].membershipId}</span></div>}
-                                <div className="font-bold uppercase text-gray-900 mb-1">Del: <span className="font-normal">{billDelivery || 'Store Walk-in'}</span></div>
-                                {billDelivery === 'Courier' && billCustomerAddress && (
-                                    <div className="font-bold uppercase text-gray-900">Address: <span className="font-normal whitespace-pre-wrap">{billCustomerAddress}</span></div>
-                                )}
-                            </div>
-                            <div className="text-right text-[9px] text-gray-800">
-                                <div className="font-bold text-gray-900 uppercase pb-1">Invoice No: <span className="font-normal">{billInvoice}</span></div>
-                                <div className="font-bold text-gray-900 uppercase pb-1">Date: <span className="font-normal">{billDate ? billDate.split('-').reverse().join('-') : ''}</span></div>
-                            </div>
+                        <div className="mb-2 pt-1 pb-2 border-b border-gray-300 shrink-0 text-[9px] leading-[1.6] text-gray-800">
+                            <div><span className="font-bold text-gray-900">Name:</span> <span>{billCustomerName || 'Walk-in Customer'}</span></div>
+                            <div><span className="font-bold text-gray-900">Phone:</span> <span>{billCustomerPhone || 'Not provided'}</span></div>
+                            {customers[normalizePhoneKey(billCustomerPhone)]?.membershipId && <div><span className="font-bold text-gray-900">Member ID:</span> <span>{customers[normalizePhoneKey(billCustomerPhone)].membershipId}</span></div>}
+                            <div><span className="font-bold text-gray-900">Delivery:</span> <span>{deliveryText}</span></div>
+                            {billDelivery === 'Courier' && billCustomerAddress && (
+                                <div><span className="font-bold text-gray-900">Address:</span> <span className="whitespace-pre-wrap">{billCustomerAddress}</span></div>
+                            )}
                         </div>
 
                         <div className="flex-grow border border-gray-300 flex flex-col mt-1 relative overflow-hidden">
@@ -2690,9 +2682,10 @@ const stringifyIfNeeded = (value) => {
                                     <tr className="bg-gray-100 border-b border-gray-300">
                                         <th className="py-2 px-1 font-bold w-10 text-center border-r border-gray-300">S.No</th>
                                         <th className="py-2 px-2 font-bold border-r border-gray-300">Particulars</th>
-                                        <th className="py-2 px-1 font-bold text-center w-16 border-r border-gray-300">HSN / SAC</th>
+                                        <th className="py-2 px-1 font-bold text-center w-16 border-r border-gray-300">HSN</th>
                                         <th className="py-2 px-1 font-bold text-center w-12 border-r border-gray-300">Qty</th>
                                         <th className="py-2 px-1 font-bold text-right w-16 border-r border-gray-300">Rate</th>
+                                        <th className="py-2 px-1 font-bold text-right w-12 border-r border-gray-300">Disc.</th>
                                         <th className="py-2 px-2 font-bold text-right w-20">Amount</th>
                                     </tr>
                                 </thead>
@@ -2710,17 +2703,14 @@ const stringifyIfNeeded = (value) => {
                                                 <td className="py-2 px-1 text-center border-r border-gray-300">{item.qty}</td>
                                                 <td className="py-2 px-1 text-right border-r border-gray-300">
                                                     {originalRate ? originalRate.toFixed(2) : ''}
-                                                    {discountPercent > 0 && <div className="text-[8px] font-bold text-emerald-700">-{discountPercent}%</div>}
                                                 </td>
+                                                <td className="py-2 px-1 text-right border-r border-gray-300">{discountPercent > 0 ? `-${discountPercent}%` : '-'}</td>
                                                 <td className="py-2 px-2 text-right">{itemTotal ? itemTotal.toFixed(2) : ''}</td>
                                             </tr>
                                         );
                                     })}
                                 </tbody>
                             </table>
-                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                <span className="text-[38px] font-black text-emerald-700/20 tracking-[0.35em] rotate-[-18deg]">PAID</span>
-                            </div>
                         </div>
 
                         <div className="pt-2 flex justify-between mt-2 shrink-0 gap-4 relative">
@@ -3454,7 +3444,7 @@ const stringifyIfNeeded = (value) => {
                                         </button>
                                         <button onClick={shareBillWhatsApp} title="Download the e-Bill and open this customer's WhatsApp chat" aria-label="Send e-Bill on WhatsApp" className="w-full bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 text-emerald-700 font-bold py-3.5 rounded-xl transition-all flex justify-center items-center gap-2 text-sm">
                                             <WhatsAppIcon className="h-4 w-4" />
-                                            Send e-Bill
+                                            Download / Send e-Bill
                                         </button>
                                         <button onClick={() => {
                                             if (!billCustomerPhone) return showNotification("Please enter customer phone number to send updates.");
