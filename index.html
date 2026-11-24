@@ -745,6 +745,13 @@
                 } catch (e) { return {}; }
             });
             const [customerSearch, setCustomerSearch] = useState('');
+            const [showAddMembershipModal, setShowAddMembershipModal] = useState(false);
+            const [membershipForm, setMembershipForm] = useState({
+                name: '',
+                phone: '',
+                dob: '',
+                address: ''
+            });
 
             const [availablePoints, setAvailablePoints] = useState(0);
             const [redeem1000, setRedeem1000] = useState(false);
@@ -1698,6 +1705,128 @@
                 }
             };
 
+            const sendMembershipCard = async (customer) => {
+                const phone = formatPhoneForWa(customer.phone);
+                if (!phone) {
+                    showNotification('Add a valid 10-digit phone number before sending the membership card.');
+                    return;
+                }
+                if (!customer.membershipId) {
+                    showNotification('Membership ID is missing.');
+                    return;
+                }
+
+                try {
+                    const { jsPDF } = window.jspdf;
+                    const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: [85.6, 54] });
+                    pdf.setFillColor(15, 23, 42);
+                    pdf.roundedRect(0, 0, 85.6, 54, 3, 3, 'F');
+                    pdf.setFillColor(79, 70, 229);
+                    pdf.roundedRect(0, 0, 85.6, 11, 3, 3, 'F');
+                    pdf.setTextColor(255, 255, 255);
+                    pdf.setFont('helvetica', 'bold');
+                    pdf.setFontSize(10);
+                    pdf.text(storeName || 'LOOKSTYLO FASHION', 5, 7);
+
+                    pdf.setTextColor(255, 255, 255);
+                    pdf.setFontSize(7);
+                    pdf.text('MEMBERSHIP CARD', 5, 17);
+                    pdf.setFontSize(13);
+                    pdf.text(String(customer.name || 'Member').toUpperCase(), 5, 24);
+                    pdf.setFontSize(8);
+                    pdf.setTextColor(196, 181, 253);
+                    pdf.text(customer.membershipId, 5, 31);
+                    pdf.setTextColor(255, 255, 255);
+                    pdf.setFontSize(7);
+                    pdf.text(phone.replace(/^91/, '+91 '), 5, 37);
+                    pdf.text(`Member since ${new Date().toLocaleDateString('en-IN')}`, 5, 43);
+
+                    const qrHost = document.createElement('div');
+                    new QRCode(qrHost, { text: customer.membershipId, width: 128, height: 128, correctLevel: QRCode.CorrectLevel.M });
+                    await new Promise(resolve => setTimeout(resolve, 50));
+                    const qrCanvas = qrHost.querySelector('canvas');
+                    if (qrCanvas) {
+                        pdf.setFillColor(255, 255, 255);
+                        pdf.roundedRect(64, 16, 16.5, 16.5, 1.5, 1.5, 'F');
+                        pdf.addImage(qrCanvas.toDataURL('image/png'), 'PNG', 64.5, 16.5, 15.5, 15.5);
+                    }
+
+                    const fileName = `Lookstylo_Membership_${customer.membershipId}.pdf`;
+                    const pdfBlob = pdf.output('blob');
+                    pdf.save(fileName);
+
+                    const message = `*LOOKSTYLO FASHION - MEMBERSHIP CARD*\n\nDear ${customer.name || 'Member'},\n\nYour membership is active.\n\n*Membership ID:* ${customer.membershipId}\n*Phone:* ${phone.replace(/^91/, '+91 ')}\n\nThank you for being a valued member!`;
+
+                    const whatsappApiUrl = (localStorage.getItem('whatsappApiUrl') || '').trim();
+                    if (whatsappApiUrl) {
+                        showNotification('Membership card downloaded. Sending WhatsApp copy...');
+                        const reader = new FileReader();
+                        reader.onload = () => fetch(whatsappApiUrl, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ phone, message, fileName, pdfBase64: reader.result })
+                        }).then(async response => {
+                            const result = await response.json().catch(() => ({}));
+                            if (response.ok && result.sent) {
+                                showNotification('Membership card sent on WhatsApp.');
+                            } else {
+                                throw new Error(result.error || 'WhatsApp delivery failed');
+                            }
+                        }).catch(error => {
+                            console.warn('Membership card WhatsApp delivery failed:', error);
+                            showNotification('Card downloaded. Could not send automatically; WhatsApp chat is opening.');
+                            openWhatsAppMsg(phone, message);
+                        });
+                        reader.onerror = () => {
+                            showNotification('Card downloaded. Could not prepare automatic WhatsApp delivery.');
+                            openWhatsAppMsg(phone, message);
+                        };
+                        reader.readAsDataURL(pdfBlob);
+                    } else {
+                        openWhatsAppMsg(phone, message);
+                        showNotification('Membership card downloaded. WhatsApp chat is ready to send.');
+                    }
+                } catch (error) {
+                    console.error('Membership card generation failed:', error);
+                    showNotification('Unable to generate the membership card.');
+                }
+            };
+
+            const addMembership = (sendCard = false) => {
+                const name = membershipForm.name.trim();
+                const phoneKey = normalizePhoneKey(membershipForm.phone);
+                const dob = membershipForm.dob;
+                const address = membershipForm.address.trim();
+                if (!isValidCustomerProfile(phoneKey, { name, dob })) {
+                    showNotification('Enter name, valid 10-digit phone, and date of birth.');
+                    return;
+                }
+
+                const existing = customers[phoneKey] || { name: '', address: '', addresses: [], dob: '', points: 0 };
+                const addresses = normalizeCustomerAddresses(existing.addresses, existing.address || address);
+                const nextAddresses = address && !addresses.some(entry => entry.address.toLowerCase() === address.toLowerCase())
+                    ? normalizeCustomerAddresses([...addresses, { id: generateSafeId(), label: 'Primary address', address }], address)
+                    : addresses;
+                const membershipId = existing.membershipId || createCustomerMembershipId(customers, getCustomerFirstPurchaseDate(phoneKey));
+                const member = {
+                    ...existing,
+                    name,
+                    phone: phoneKey,
+                    dob,
+                    address: address || existing.address || '',
+                    addresses: nextAddresses,
+                    membershipId,
+                    points: Number(existing.points || 0)
+                };
+                const updated = { ...customers, [phoneKey]: member };
+                localStorage.setItem('customers', JSON.stringify(updated));
+                setCustomers(updated);
+                setShowAddMembershipModal(false);
+                setMembershipForm({ name: '', phone: '', dob: '', address: '' });
+                showNotification(sendCard ? 'Membership added. Preparing card...' : 'Membership added successfully.');
+                if (sendCard) sendMembershipCard({ phone: phoneKey, name, membershipId });
+            };
+
             const saveCustomerAddress = () => {
                 const phoneKey = normalizePhoneKey(billCustomerPhone);
                 const address = billCustomerAddress.trim();
@@ -2415,7 +2544,7 @@ const stringifyIfNeeded = (value) => {
             const currentCustomerPurchases = (customerPurchases[currentCustomerPhoneKey]?.bills || [])
                 .sort((first, second) => String(second.date || '').localeCompare(String(first.date || '')));
             const currentCustomerPurchaseTotal = currentCustomerPurchases.reduce((total, bill) => total + (Number(bill.total) || 0), 0);
-            const customerDirectory = Object.entries(customers)
+            const allCustomerDirectory = Object.entries(customers)
                 .map(([phone, customer]) => {
                     const digits = String(phone).replace(/\D/g, '');
                     const displayPhone = digits.length === 12 && digits.startsWith('91') ? `+91 ${digits.slice(2)}` : digits;
@@ -2427,6 +2556,7 @@ const stringifyIfNeeded = (value) => {
                         displayPhone,
                         membershipId: customer?.membershipId || '',
                         name: customer?.name || '',
+                        points: Number(customer?.points) || 0,
                         dob: customer?.dob || '',
                         address: customer?.address || latestOnlineOrder?.address || '',
                         addresses: normalizeCustomerAddresses(customer?.addresses, customer?.address || latestOnlineOrder?.address || ''),
@@ -2441,8 +2571,9 @@ const stringifyIfNeeded = (value) => {
                         )
                     };
                 })
-                .filter(customer => `${customer.membershipId} ${customer.name} ${customer.phone} ${customer.displayPhone} ${customer.dob} ${customer.address}`.toLowerCase().includes(customerSearch.trim().toLowerCase()))
                 .sort((first, second) => first.name.localeCompare(second.name));
+            const customerDirectory = allCustomerDirectory
+                .filter(customer => `${customer.membershipId} ${customer.name} ${customer.phone} ${customer.displayPhone} ${customer.dob} ${customer.address}`.toLowerCase().includes(customerSearch.trim().toLowerCase()));
             const [reportType, setReportType] = useState('all'); 
             const [reportDate, setReportDate] = useState(todayStr);
             const [reportStartDate, setReportStartDate] = useState(todayStr);
@@ -2603,6 +2734,52 @@ const stringifyIfNeeded = (value) => {
                 link.click();
                 document.body.removeChild(link);
                 showNotification(`Customer Database (${periodLabel}) Exported Successfully!`);
+            };
+
+            const exportAllCustomersToExcel = () => {
+                if (allCustomerDirectory.length === 0) {
+                    showNotification('No customer data available to export.');
+                    return;
+                }
+
+                const headers = [
+                    'Membership ID', 'Customer Name', 'Phone Number', 'Date of Birth', 'Address',
+                    'Saved Addresses', 'Loyalty Points', 'Purchases', 'Total Spent (Rs)',
+                    'Online Orders', 'Online Sales (Rs)', 'Latest Online Order Date'
+                ];
+                const rows = allCustomerDirectory.map(customer => [
+                    customer.membershipId,
+                    customer.name,
+                    customer.displayPhone || customer.phone,
+                    customer.dob,
+                    customer.address,
+                    customer.addresses.map(address => `${address.label}: ${address.address}`).join('; '),
+                    customer.points,
+                    customer.purchaseCount,
+                    customer.purchaseTotal,
+                    customer.onlineOrderCount,
+                    customer.onlineOrderTotal,
+                    customer.lastOnlineOrderDate
+                ]);
+                const csvCell = value => {
+                    const text = String(value ?? '');
+                    const safeText = typeof value === 'string' && /^[\s]*[=+\-@]/.test(value) ? `'${text}` : text;
+                    return `"${safeText.replace(/"/g, '""')}"`;
+                };
+                const csvContent = '\uFEFF' + [headers, ...rows]
+                    .map(row => row.map(csvCell).join(','))
+                    .join('\r\n');
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `Lookstylo_Customer_Data_${todayStr}.csv`;
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
+                showNotification('Customer data exported as an Excel-compatible CSV file.');
             };
 
             const exportToCSV = () => {
@@ -3490,7 +3667,7 @@ const stringifyIfNeeded = (value) => {
                             <div className="w-full max-w-6xl mx-auto bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-slate-200 relative">
                                 
                                 {isInvModalOpen && (
-                                    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[400] flex items-center justify-center p-4 animate-fade-in" onClick={() => setIsInvModalOpen(false)}>
+                                    ReactDOM.createPortal(<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[400] flex items-center justify-center p-4 animate-fade-in" onClick={() => setIsInvModalOpen(false)}>
                                         <div className="bg-white rounded-[2rem] shadow-2xl p-8 transform transition-all w-full max-w-3xl max-h-[90vh] overflow-y-auto border border-slate-200" onClick={e => e.stopPropagation()}>
                                             <div className="flex justify-between items-center mb-8 border-b border-slate-100 pb-4">
                                                 <h3 className="text-2xl font-black text-slate-900">{invFormData.id ? 'Edit Product Details' : 'Add New Product'}</h3>
@@ -3559,7 +3736,7 @@ const stringifyIfNeeded = (value) => {
                                                 </button>
                                             </div>
                                         </div>
-                                    </div>
+                                    </div>, document.body)
                                 )}
 
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
@@ -3752,11 +3929,45 @@ const stringifyIfNeeded = (value) => {
                                         <h2 className="text-2xl font-black text-slate-900 tracking-tight">Customer Data</h2>
                                         <p className="mt-1 text-sm font-medium text-slate-500">{Object.keys(customers).length} customers · {Object.values(customers).filter(customer => customer?.dob).length} with date of birth</p>
                                     </div>
-                                    <input type="search" value={customerSearch} onChange={e=>setCustomerSearch(e.target.value)} placeholder="Search name, phone, address, or ID" aria-label="Search customers" className="w-full sm:max-w-sm p-3 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-sm font-medium text-slate-800 shadow-sm" />
+                                    <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                                        <input type="search" value={customerSearch} onChange={e=>setCustomerSearch(e.target.value)} placeholder="Search name, phone, address, or ID" aria-label="Search customers" className="w-full p-3 sm:w-72 bg-white border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-sm font-medium text-slate-800 shadow-sm" />
+                                        <button type="button" onClick={exportAllCustomersToExcel} title="Download the complete customer list as a file that opens in Excel" className="inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-800 hover:bg-emerald-100">
+                                            <Icons.Download className="h-4 w-4" /> Export Excel
+                                        </button>
+                                        <button type="button" onClick={() => setShowAddMembershipModal(true)} className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-bold text-white shadow-sm hover:bg-indigo-700">
+                                            <Icons.Plus className="h-4 w-4" /> Add Membership
+                                        </button>
+                                    </div>
                                 </div>
 
+                                {showAddMembershipModal && (
+                                    ReactDOM.createPortal(<div className="fixed inset-0 z-[400] flex items-center justify-center overflow-y-auto bg-slate-950/60 p-4 backdrop-blur-sm" onClick={() => setShowAddMembershipModal(false)}>
+                                        <div className="my-auto w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl" onClick={event => event.stopPropagation()}>
+                                            <div className="mb-5 flex items-start justify-between gap-4">
+                                                <div>
+                                                    <h3 className="text-xl font-black text-slate-900">Add New Membership</h3>
+                                                    <p className="mt-1 text-sm text-slate-500">Create a member profile and send their digital membership card.</p>
+                                                </div>
+                                                <button type="button" onClick={() => setShowAddMembershipModal(false)} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label="Close">×</button>
+                                            </div>
+                                            <div className="grid gap-4 sm:grid-cols-2">
+                                                <ModernInput label="Member Name" type="text" value={membershipForm.name} onChange={event => setMembershipForm(previous => ({ ...previous, name: event.target.value }))} placeholder="Full name" className="sm:col-span-2" />
+                                                <ModernInput label="Phone Number" type="tel" inputMode="numeric" value={membershipForm.phone} onChange={event => setMembershipForm(previous => ({ ...previous, phone: event.target.value }))} placeholder="10-digit mobile number" />
+                                                <ModernInput label="Date of Birth" type="date" value={membershipForm.dob} onChange={event => setMembershipForm(previous => ({ ...previous, dob: event.target.value }))} />
+                                                <ModernInput label="Address" type="text" value={membershipForm.address} onChange={event => setMembershipForm(previous => ({ ...previous, address: event.target.value }))} placeholder="Optional address" className="sm:col-span-2" />
+                                            </div>
+                                            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                                                <button type="button" onClick={() => addMembership(false)} className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50">Save Membership</button>
+                                                <button type="button" onClick={() => addMembership(true)} className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-sm font-bold text-white hover:bg-emerald-700">
+                                                    <WhatsAppIcon className="h-4 w-4" /> Save & Send Card
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>, document.body)
+                                )}
+
                                 <div className="overflow-x-auto border border-slate-200 rounded-xl">
-                                    <table className="w-full min-w-[1400px] text-left border-collapse">
+                                    <table className="w-full min-w-[1500px] text-left border-collapse">
                                         <thead className="bg-slate-50 border-b border-slate-200 text-xs uppercase tracking-wider text-slate-500">
                                             <tr>
                                                 <th className="p-4 font-bold">Membership ID</th>
@@ -3769,11 +3980,12 @@ const stringifyIfNeeded = (value) => {
                                                 <th className="p-4 font-bold text-right">Online Orders</th>
                                                 <th className="p-4 font-bold text-right">Online Sales</th>
                                                 <th className="p-4 font-bold">Online Order History</th>
+                                                <th className="p-4 font-bold text-center">Membership Card</th>
                                             </tr>
                                         </thead>
                                         <tbody className="bg-white divide-y divide-slate-100">
                                             {customerDirectory.length === 0 ? (
-                                                <tr><td colSpan="10" className="p-8 text-center text-sm font-medium text-slate-400">{Object.keys(customers).length ? 'No customers match this search.' : 'Customer profiles will appear here when a phone number is saved.'}</td></tr>
+                                                <tr><td colSpan="11" className="p-8 text-center text-sm font-medium text-slate-400">{Object.keys(customers).length ? 'No customers match this search.' : 'Customer profiles will appear here when a phone number is saved.'}</td></tr>
                                             ) : customerDirectory.map(customer => (
                                                 <tr key={customer.phone} className="hover:bg-slate-50">
                                                     <td className="p-4 font-mono text-sm font-bold text-indigo-700">{customer.membershipId}</td>
@@ -3821,6 +4033,11 @@ const stringifyIfNeeded = (value) => {
                                                                 )}
                                                             </>
                                                             : <span className="text-slate-400">No online order</span>}
+                                                    </td>
+                                                    <td className="p-4 text-center">
+                                                        <button type="button" onClick={() => sendMembershipCard(customer)} className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700">
+                                                            <WhatsAppIcon className="h-4 w-4" /> Send Card
+                                                        </button>
                                                     </td>
                                                 </tr>
                                             ))}
